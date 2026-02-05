@@ -3,6 +3,7 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 import { getSession } from '../state.js'
+import { getClientCount, requestExport } from '../websocket.js'
 import { log } from '../logger.js'
 
 /**
@@ -15,9 +16,9 @@ export function registerExport(server: McpServer): void {
       description:
         '将当前图表导出为 PNG 或 SVG 文件。\n\n' +
         '注意:\n' +
-        '- 导出的是 Excalidraw JSON 格式\n' +
-        '- 浏览器端会打开下载对话框\n' +
-        '- 实际的文件生成在浏览器中完成',
+        '- JSON 格式由服务器直接保存\n' +
+        '- PNG/SVG 由浏览器生成并回传到服务器保存\n' +
+        '- 需要先启动 start_session 并保持浏览器连接',
       inputSchema: z.object({
         path: z.string().describe('保存路径 (包含文件名)'),
         format: z.enum(['png', 'svg', 'json']).default('json').describe('导出格式'),
@@ -64,19 +65,44 @@ export function registerExport(server: McpServer): void {
           }
         }
 
-        // 对于 PNG/SVG，返回提示信息
-        // 实际导出由浏览器端处理
+        if (getClientCount() === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ 未检测到浏览器会话，请先调用 start_session。`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        const exportFormat = format === 'png' ? 'png' : 'svg'
+        const data = await requestExport({
+          format: exportFormat,
+          elements: session.elements,
+          appState: session.appState,
+        })
+
+        const dir = path.dirname(finalPath)
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true })
+        }
+
+        const buffer = Buffer.from(data, 'base64')
+        fs.writeFileSync(finalPath, buffer)
+
+        log.info(`Exported diagram to ${finalPath}`)
+
         return {
           content: [
             {
               type: 'text',
               text:
-                `📤 导出请求已记录\n\n` +
+                `✅ 图表已导出!\n\n` +
+                `路径: ${finalPath}\n` +
                 `格式: ${format.toUpperCase()}\n` +
-                `建议路径: ${finalPath}\n\n` +
-                `注意: PNG/SVG 格式需要浏览器支持，\n` +
-                `请在浏览器中使用导出功能保存文件。\n\n` +
-                `JSON 文件已可以直接保存。`,
+                `元素数: ${session.elements.length}`,
             },
           ],
         }

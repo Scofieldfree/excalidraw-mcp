@@ -52,6 +52,17 @@ export async function startHttpServer(port: number): Promise<void> {
       filePath = path.join(webRoot, 'index.html')
     }
 
+    const stat = fs.statSync(filePath)
+    const etag = `W/"${stat.size}-${stat.mtimeMs}"`
+    const isIndex = path.basename(filePath) === 'index.html'
+    const isAsset = requestPath.startsWith('/assets/')
+
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304)
+      res.end()
+      return
+    }
+
     fs.readFile(filePath, (err, data) => {
       if (err) {
         res.writeHead(500)
@@ -61,7 +72,16 @@ export async function startHttpServer(port: number): Promise<void> {
 
       const ext = path.extname(filePath)
       const contentType = MIME_TYPES[ext] || 'application/octet-stream'
-      res.writeHead(200, { 'Content-Type': contentType })
+      const cacheControl = isIndex
+        ? 'no-cache'
+        : isAsset
+          ? 'public, max-age=31536000, immutable'
+          : 'no-cache'
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': cacheControl,
+        ETag: etag,
+      })
       res.end(data)
     })
   })

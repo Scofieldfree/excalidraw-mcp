@@ -4,7 +4,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
-console.log({ configDir })
 
 export default defineConfig({
   plugins: [react()],
