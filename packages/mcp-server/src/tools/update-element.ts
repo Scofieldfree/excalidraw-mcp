@@ -1,0 +1,92 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
+import { getSession, updateSession } from '../state.js'
+import { broadcast } from '../websocket.js'
+
+/**
+ * 更新单个元素的属性
+ */
+export function registerUpdateElement(server: McpServer): void {
+  server.registerTool(
+    'update_element',
+    {
+      description:
+        '更新已存在元素的属性。\n\n' +
+        '可更新的属性:\n' +
+        '- x, y: 位置坐标\n' +
+        '- width, height: 尺寸\n' +
+        '- strokeColor: 边框颜色\n' +
+        '- backgroundColor: 背景颜色\n' +
+        '- fillStyle: 填充样式\n' +
+        '- strokeWidth: 线条宽度\n' +
+        '- roughness: 粗糙度\n' +
+        '- opacity: 透明度\n' +
+        '- text: 文本内容 (仅 text 类型)',
+      inputSchema: z.object({
+        id: z.string().describe('要更新的元素 ID'),
+        updates: z
+          .object({
+            x: z.number().optional(),
+            y: z.number().optional(),
+            width: z.number().optional(),
+            height: z.number().optional(),
+            strokeColor: z.string().optional(),
+            backgroundColor: z.string().optional(),
+            fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).optional(),
+            strokeWidth: z.number().optional(),
+            roughness: z.number().optional(),
+            opacity: z.number().optional(),
+            text: z.string().optional(),
+          })
+          .describe('要更新的属性'),
+      }),
+    },
+    async ({ id, updates }) => {
+      try {
+        const session = getSession()
+        const element = session.elements.find((el) => el.id === id)
+
+        if (!element) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ 未找到元素: ${id}`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        // 更新元素属性
+        Object.assign(element, updates)
+        element.updated = Date.now()
+        element.version++
+
+        // 更新会话
+        updateSession(session)
+
+        // 广播到浏览器
+        broadcast({
+          type: 'update',
+          elements: session.elements,
+        })
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ 元素已更新: ${id}\n\n` + `更新的属性: ${Object.keys(updates).join(', ')}`,
+            },
+          ],
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return {
+          content: [{ type: 'text', text: `Error: ${message}` }],
+          isError: true,
+        }
+      }
+    },
+  )
+}
