@@ -171,7 +171,7 @@ export default function App() {
             isRemoteUpdateRef.current = true
             excalidrawRef.current?.updateScene({
               elements: msg.elements || [],
-              appState: msg.appState,
+              appState: msg.appState ? { ...msg.appState, collaborators: new Map() } : undefined,
             })
             setTimeout(() => {
               isRemoteUpdateRef.current = false
@@ -232,11 +232,14 @@ export default function App() {
               return
             }
 
+            // 过滤掉不可序列化的属性
+            const { collaborators: _collaborators, ...safeAppState } = appState as any
+
             ws.send(
               JSON.stringify({
                 type: 'update',
                 elements,
-                appState,
+                appState: safeAppState,
               }),
             )
           }}

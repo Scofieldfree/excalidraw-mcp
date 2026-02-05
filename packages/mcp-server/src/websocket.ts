@@ -185,9 +185,12 @@ export function startWebSocket(server: any): void {
 
           session.elements = msg.elements as unknown as ExcalidrawElement[]
           if (msg.appState) {
+            // 防御性编程：移除可能导致客户端崩溃的 collaborators 属性
+            const { collaborators: _collaborators, ...safeAppState } = msg.appState as any
+
             session.appState = {
               ...session.appState,
-              ...(msg.appState as Partial<AppState>),
+              ...(safeAppState as Partial<AppState>),
             }
           }
           session.version++
