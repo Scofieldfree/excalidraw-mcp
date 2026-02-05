@@ -21,6 +21,7 @@ const ExcalidrawElementSchema = z.object({
       'magicframe',
     ])
     .describe('元素类型'),
+  id: z.string().optional().describe('元素 ID'),
   x: z.number().describe('X 坐标'),
   y: z.number().describe('Y 坐标'),
   width: z.number().optional().describe('宽度'),
@@ -42,6 +43,22 @@ const ExcalidrawElementSchema = z.object({
   pressures: z.array(z.number()).optional().describe('自由绘制压力数组'),
   startArrowhead: z.string().optional().describe('起始箭头样式'),
   endArrowhead: z.string().optional().describe('结束箭头样式'),
+  startBinding: z
+    .object({
+      elementId: z.string(),
+      focus: z.number().optional(),
+      gap: z.number().optional(),
+    })
+    .optional()
+    .describe('起始点绑定信息'),
+  endBinding: z
+    .object({
+      elementId: z.string(),
+      focus: z.number().optional(),
+      gap: z.number().optional(),
+    })
+    .optional()
+    .describe('结束点绑定信息'),
   roundness: z
     .object({
       type: z.number(),
@@ -157,7 +174,7 @@ function toScaleTuple(scale: number[] | undefined): [number, number] {
 
 // 创建完整的 Excalidraw 元素
 function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>) {
-  const id = crypto.randomUUID()
+  const id = input.id || crypto.randomUUID()
   const now = Date.now()
   const width = input.width || 100
   const height = input.height || 100
@@ -219,8 +236,20 @@ function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>)
       ...base,
       points,
       lastCommittedPoint: null,
-      startBinding: null,
-      endBinding: null,
+      startBinding: input.startBinding
+        ? {
+            elementId: input.startBinding.elementId,
+            focus: input.startBinding.focus || 0,
+            gap: input.startBinding.gap || 1,
+          }
+        : null,
+      endBinding: input.endBinding
+        ? {
+            elementId: input.endBinding.elementId,
+            focus: input.endBinding.focus || 0,
+            gap: input.endBinding.gap || 1,
+          }
+        : null,
       startArrowhead: input.startArrowhead ?? null,
       endArrowhead: input.endArrowhead ?? null,
     }

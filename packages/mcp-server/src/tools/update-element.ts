@@ -36,9 +36,32 @@ export function registerUpdateElement(server: McpServer): void {
             backgroundColor: z.string().optional(),
             fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).optional(),
             strokeWidth: z.number().optional(),
+            strokeStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
             roughness: z.number().optional(),
             opacity: z.number().optional(),
             text: z.string().optional(),
+            fontSize: z.number().optional(),
+            roundness: z
+              .object({
+                type: z.number(),
+                value: z.number().optional(),
+              })
+              .optional(),
+            points: z.array(z.array(z.number())).optional(),
+            startBinding: z
+              .object({
+                elementId: z.string(),
+                focus: z.number(),
+                gap: z.number(),
+              })
+              .optional(),
+            endBinding: z
+              .object({
+                elementId: z.string(),
+                focus: z.number(),
+                gap: z.number(),
+              })
+              .optional(),
           })
           .describe('要更新的属性'),
       }),
