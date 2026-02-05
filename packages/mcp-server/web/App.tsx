@@ -1,9 +1,5 @@
-import {
-  Excalidraw,
-  ExcalidrawImperativeAPI,
-  exportToBlob,
-  exportToSvg,
-} from '@excalidraw/excalidraw'
+import { Excalidraw, exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useEffect, useRef } from 'react'
 
 function getWebSocketUrl(): string {
@@ -78,8 +74,7 @@ export default function App() {
         reader.readAsDataURL(blob)
       })
 
-    const textToBase64 = (text: string) =>
-      window.btoa(unescape(encodeURIComponent(text)))
+    const textToBase64 = (text: string) => window.btoa(unescape(encodeURIComponent(text)))
 
     const handleExport = async (msg: {
       requestId?: string
@@ -107,9 +102,7 @@ export default function App() {
             mimeType: 'image/png',
           })
           const data = await blobToBase64(blob)
-          wsRef.current?.send(
-            JSON.stringify({ type: 'export_result', requestId, data, format }),
-          )
+          wsRef.current?.send(JSON.stringify({ type: 'export_result', requestId, data, format }))
           return
         }
 
@@ -120,14 +113,10 @@ export default function App() {
         })
         const svgString = new XMLSerializer().serializeToString(svg)
         const data = textToBase64(svgString)
-        wsRef.current?.send(
-          JSON.stringify({ type: 'export_result', requestId, data, format }),
-        )
+        wsRef.current?.send(JSON.stringify({ type: 'export_result', requestId, data, format }))
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Export failed'
-        wsRef.current?.send(
-          JSON.stringify({ type: 'export_result', requestId, error: message }),
-        )
+        wsRef.current?.send(JSON.stringify({ type: 'export_result', requestId, error: message }))
       }
     }
 
@@ -188,7 +177,7 @@ export default function App() {
   return (
     <div style={{ height: '100vh', width: '100vw' }}>
       <Excalidraw
-        ref={(api) => {
+        excalidrawAPI={(api) => {
           excalidrawRef.current = api
         }}
         onChange={(elements, appState) => {

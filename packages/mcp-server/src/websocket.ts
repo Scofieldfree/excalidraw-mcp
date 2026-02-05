@@ -4,8 +4,7 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
-import { getSession, updateSession } from './state.js'
-import type { AppState, ExcalidrawElement } from './state.js'
+import { getSession, updateSession, type AppState, type ExcalidrawElement } from './state.js'
 import { log } from './logger.js'
 
 let wss: WebSocketServer | null = null
