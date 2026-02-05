@@ -4,10 +4,10 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  root: path.resolve(__dirname, 'web'),
+  root: 'web',
   build: {
-    outDir: path.resolve(__dirname, 'web-dist'),
-    emptyDirBeforeWrite: true,
+    outDir: path.resolve(__dirname, '..', 'web-dist'),
+    emptyOutDir: true,
   },
   server: {
     port: 3100,

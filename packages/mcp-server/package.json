@@ -9,14 +9,14 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
-    "web-dist"
+    "web"
   ],
   "scripts": {
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:web\"",
     "dev:server": "tsx watch src/index.ts",
     "dev:web": "vite --config vite.config.ts",
     "build": "pnpm build:web && pnpm build:server",
-    "build:server": "tsup src/index.ts --format esm --dts --clean --outDir dist",
+    "build:server": "tsup src/index.ts --format esm --dts --clean --outDir dist --tsconfig tsconfig.server.json",
     "build:web": "vite build --config vite.config.ts --outDir web-dist",
     "start": "node dist/index.js",
     "prepublishOnly": "pnpm build",
