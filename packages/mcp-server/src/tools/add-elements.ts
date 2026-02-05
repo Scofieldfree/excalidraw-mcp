@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getSession, updateSession } from '../state.js'
-import { broadcast } from '../websocket.js'
+import { broadcastToSession } from '../websocket.js'
 
 // Excalidraw 元素 Schema
 const ExcalidrawElementSchema = z.object({
@@ -36,9 +36,9 @@ const ExcalidrawElementSchema = z.object({
   textAlign: z.enum(['left', 'center', 'right']).optional().describe('文本对齐'),
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional().describe('垂直对齐'),
   points: z
-    .array(z.tuple([z.number(), z.number()]))
+    .array(z.array(z.number()))
     .optional()
-    .describe('线条/自由绘制点'),
+    .describe('线条/自由绘制点，格式: [[x1,y1], [x2,y2], ...]'),
   pressures: z.array(z.number()).optional().describe('自由绘制压力数组'),
   startArrowhead: z.string().optional().describe('起始箭头样式'),
   endArrowhead: z.string().optional().describe('结束箭头样式'),
@@ -55,7 +55,7 @@ const ExcalidrawElementSchema = z.object({
   frameId: z.string().nullable().optional().describe('所属 frameId'),
   fileId: z.string().nullable().optional().describe('图片文件 ID'),
   status: z.enum(['pending', 'saved', 'error']).optional().describe('图片状态'),
-  scale: z.tuple([z.number(), z.number()]).optional().describe('图片缩放'),
+  scale: z.array(z.number()).optional().describe('图片缩放，格式: [scaleX, scaleY]'),
   crop: z
     .object({
       x: z.number(),
@@ -96,14 +96,16 @@ export function registerAddElements(server: McpServer): void {
         '- backgroundColor: 背景颜色 (如 #D97706)\n' +
         '- fillStyle: 填充样式 (solid/hachure/cross-hatch)\n' +
         '- strokeWidth: 线条宽度 (1-4)\n' +
-        '- roughness: 粗糙度 (0=平滑, 1=轻微手绘, 2=强手绘)',
+        '- roughness: 粗糙度 (0=平滑, 1=轻微手绘, 2=强手绘)\n\n' +
+        '多会话支持：通过 sessionId 指定要操作的会话。',
       inputSchema: z.object({
+        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
         elements: z.array(ExcalidrawElementSchema).describe('要添加的元素数组'),
       }),
     },
-    async ({ elements }) => {
+    async ({ sessionId, elements }) => {
       try {
-        const session = getSession()
+        const session = getSession(sessionId)
 
         // 转换为完整的 Excalidraw 元素格式
         const newElements = elements.map((el) => createExcalidrawElement(el))
@@ -113,8 +115,8 @@ export function registerAddElements(server: McpServer): void {
         session.version++
         updateSession(session)
 
-        // 广播到浏览器
-        broadcast({
+        // 广播到同一会话的浏览器
+        broadcastToSession(session.id, {
           type: 'update',
           elements: session.elements,
           appState: session.appState,
@@ -125,7 +127,7 @@ export function registerAddElements(server: McpServer): void {
             {
               type: 'text',
               text:
-                `✅ 成功添加 ${elements.length} 个元素！\n\n` +
+                `✅ 成功添加 ${elements.length} 个元素到会话 "${session.id}"！\n\n` +
                 `元素 IDs: ${newElements.map((e) => e.id).join(', ')}`,
             },
           ],
@@ -139,6 +141,18 @@ export function registerAddElements(server: McpServer): void {
       }
     },
   )
+}
+
+// 将 number[][] 转换为 [number, number][] 元组格式
+function toPointTuples(points: number[][] | undefined): [number, number][] {
+  if (!points) return []
+  return points.map((p) => [p[0] ?? 0, p[1] ?? 0] as [number, number])
+}
+
+// 将 number[] 转换为 [number, number] 元组格式
+function toScaleTuple(scale: number[] | undefined): [number, number] {
+  if (!scale) return [1, 1]
+  return [scale[0] ?? 1, scale[1] ?? 1]
 }
 
 // 创建完整的 Excalidraw 元素
@@ -195,10 +209,12 @@ function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>)
   }
 
   if (input.type === 'line' || input.type === 'arrow') {
-    const points = input.points || [
-      [0, 0],
-      [width, height],
-    ]
+    const points: [number, number][] = input.points
+      ? toPointTuples(input.points)
+      : [
+          [0, 0],
+          [width, height],
+        ]
     const linear = {
       ...base,
       points,
@@ -218,10 +234,12 @@ function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>)
   }
 
   if (input.type === 'freedraw') {
-    const points = input.points || [
-      [0, 0],
-      [width, height],
-    ]
+    const points: [number, number][] = input.points
+      ? toPointTuples(input.points)
+      : [
+          [0, 0],
+          [width, height],
+        ]
     return {
       ...base,
       points,
@@ -236,7 +254,7 @@ function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>)
       ...base,
       fileId: input.fileId ?? null,
       status: input.status || 'pending',
-      scale: input.scale || [1, 1],
+      scale: toScaleTuple(input.scale),
       crop: input.crop || null,
     }
   }

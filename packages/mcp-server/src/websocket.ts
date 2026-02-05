@@ -1,6 +1,7 @@
 /**
  * WebSocket 服务
  * 实现浏览器与服务器之间的实时双向同步
+ * 支持多会话：每个客户端关联一个 sessionId
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
@@ -8,7 +9,13 @@ import { getSession, updateSession, type AppState, type ExcalidrawElement } from
 import { log } from './logger.js'
 
 let wss: WebSocketServer | null = null
-const clients = new Set<WebSocket>()
+
+// 客户端映射：WebSocket -> sessionId
+const clientSessions = new Map<WebSocket, string>()
+
+// 会话映射：sessionId -> 客户端集合
+const sessionClients = new Map<string, Set<WebSocket>>()
+
 const pendingExports = new Map<
   string,
   { resolve: (data: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }
@@ -32,21 +39,72 @@ function isValidElementsPayload(elements: unknown): elements is Array<Record<str
 }
 
 /**
+ * 将客户端加入会话
+ */
+function joinSession(ws: WebSocket, sessionId: string): void {
+  // 清理旧的会话关联
+  const oldSessionId = clientSessions.get(ws)
+  if (oldSessionId && oldSessionId !== sessionId) {
+    const oldClients = sessionClients.get(oldSessionId)
+    if (oldClients) {
+      oldClients.delete(ws)
+      if (oldClients.size === 0) {
+        sessionClients.delete(oldSessionId)
+      }
+    }
+  }
+
+  // 建立新的会话关联
+  clientSessions.set(ws, sessionId)
+
+  if (!sessionClients.has(sessionId)) {
+    sessionClients.set(sessionId, new Set())
+  }
+  sessionClients.get(sessionId)!.add(ws)
+
+  log.info(`Client joined session: ${sessionId}`)
+}
+
+/**
+ * 移除客户端
+ */
+function removeClient(ws: WebSocket): void {
+  const sessionId = clientSessions.get(ws)
+  if (sessionId) {
+    const clients = sessionClients.get(sessionId)
+    if (clients) {
+      clients.delete(ws)
+      if (clients.size === 0) {
+        sessionClients.delete(sessionId)
+      }
+    }
+  }
+  clientSessions.delete(ws)
+}
+
+/**
  * 启动 WebSocket 服务器
  */
 export function startWebSocket(server: any): void {
   wss = new WebSocketServer({ server })
   log.info('WebSocket server attached')
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     log.info('WebSocket client connected')
-    clients.add(ws)
+
+    // 从 URL 查询参数获取 sessionId
+    const url = new URL(req.url || '/', `http://localhost`)
+    const sessionId = url.searchParams.get('sessionId') || 'default'
+
+    // 加入会话
+    joinSession(ws, sessionId)
 
     // 发送当前状态
-    const session = getSession()
+    const session = getSession(sessionId)
     ws.send(
       JSON.stringify({
         type: 'init',
+        sessionId: session.id,
         elements: session.elements,
         appState: session.appState,
         version: session.version,
@@ -62,11 +120,31 @@ export function startWebSocket(server: any): void {
           return
         }
 
+        // 心跳
         if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }))
           return
         }
 
+        // 切换会话
+        if (msg.type === 'join_session') {
+          const newSessionId = typeof msg.sessionId === 'string' ? msg.sessionId : 'default'
+          joinSession(ws, newSessionId)
+
+          const session = getSession(newSessionId)
+          ws.send(
+            JSON.stringify({
+              type: 'init',
+              sessionId: session.id,
+              elements: session.elements,
+              appState: session.appState,
+              version: session.version,
+            }),
+          )
+          return
+        }
+
+        // 导出结果
         if (msg.type === 'export_result') {
           const requestId = msg.requestId
           const dataPayload = msg.data
@@ -92,6 +170,7 @@ export function startWebSocket(server: any): void {
           return
         }
 
+        // 更新画布
         if (msg.type === 'update') {
           if (!isValidElementsPayload(msg.elements)) {
             return
@@ -100,8 +179,10 @@ export function startWebSocket(server: any): void {
             return
           }
 
-          // 用户手动编辑，更新状态
-          const session = getSession()
+          // 获取客户端所属的会话
+          const currentSessionId = clientSessions.get(ws) || 'default'
+          const session = getSession(currentSessionId)
+
           session.elements = msg.elements as unknown as ExcalidrawElement[]
           if (msg.appState) {
             session.appState = {
@@ -112,8 +193,8 @@ export function startWebSocket(server: any): void {
           session.version++
           updateSession(session)
 
-          // 广播给其他客户端
-          broadcast(msg, ws)
+          // 只广播给同一会话的其他客户端
+          broadcastToSession(currentSessionId, msg, ws)
         }
       } catch (error) {
         log.error('WebSocket message error:', error)
@@ -122,7 +203,7 @@ export function startWebSocket(server: any): void {
 
     ws.on('close', () => {
       log.info('WebSocket client disconnected')
-      clients.delete(ws)
+      removeClient(ws)
     })
 
     ws.on('error', (error) => {
@@ -132,11 +213,26 @@ export function startWebSocket(server: any): void {
 }
 
 /**
- * 广播消息给所有客户端
+ * 广播消息给指定会话的所有客户端
+ */
+export function broadcastToSession(sessionId: string, msg: any, exclude?: WebSocket): void {
+  const clients = sessionClients.get(sessionId)
+  if (!clients) return
+
+  const data = JSON.stringify(msg)
+  clients.forEach((client) => {
+    if (client !== exclude && client.readyState === WebSocket.OPEN) {
+      client.send(data)
+    }
+  })
+}
+
+/**
+ * 广播消息给所有客户端（向后兼容）
  */
 export function broadcast(msg: any, exclude?: WebSocket): void {
   const data = JSON.stringify(msg)
-  clients.forEach((client) => {
+  clientSessions.forEach((sessionId, client) => {
     if (client !== exclude && client.readyState === WebSocket.OPEN) {
       client.send(data)
     }
@@ -147,17 +243,28 @@ export function broadcast(msg: any, exclude?: WebSocket): void {
  * 获取当前连接的客户端数量
  */
 export function getClientCount(): number {
-  return clients.size
+  return clientSessions.size
+}
+
+/**
+ * 获取指定会话的客户端数量
+ */
+export function getSessionClientCount(sessionId: string): number {
+  return sessionClients.get(sessionId)?.size || 0
 }
 
 export function requestExport(payload: {
+  sessionId?: string
   format: 'png' | 'svg'
   elements: unknown
   appState: unknown
   timeoutMs?: number
 }): Promise<string> {
-  if (clients.size === 0) {
-    return Promise.reject(new Error('No active browser session'))
+  const sessionId = payload.sessionId || 'default'
+  const clients = sessionClients.get(sessionId)
+
+  if (!clients || clients.size === 0) {
+    return Promise.reject(new Error(`No active browser session for: ${sessionId}`))
   }
 
   const requestId = crypto.randomUUID()

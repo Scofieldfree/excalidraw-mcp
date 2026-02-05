@@ -34,9 +34,11 @@ process.stdin.on('close', () => gracefulShutdown('stdin closed'))
 
 // 启动服务
 async function main() {
-  // 启动内嵌 HTTP/WebSocket 服务器
-  await startHttpServer(config.port)
-  log.info(`HTTP server started on port ${config.port}`)
+  // 启动内嵌 HTTP/WebSocket 服务器（支持端口自动递增）
+  const actualPort = await startHttpServer(config.port)
+  if (actualPort !== config.port) {
+    log.info(`Note: Using port ${actualPort} instead of ${config.port}`)
+  }
 
   // 连接 MCP 传输
   const transport = new StdioServerTransport()

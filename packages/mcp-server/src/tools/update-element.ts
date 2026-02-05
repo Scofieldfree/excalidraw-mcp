@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getSession, updateSession } from '../state.js'
-import { broadcast } from '../websocket.js'
+import { broadcastToSession } from '../websocket.js'
 
 /**
  * 更新单个元素的属性
@@ -21,8 +21,10 @@ export function registerUpdateElement(server: McpServer): void {
         '- strokeWidth: 线条宽度\n' +
         '- roughness: 粗糙度\n' +
         '- opacity: 透明度\n' +
-        '- text: 文本内容 (仅 text 类型)',
+        '- text: 文本内容 (仅 text 类型)\n\n' +
+        '多会话支持：通过 sessionId 指定要操作的会话。',
       inputSchema: z.object({
+        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
         id: z.string().describe('要更新的元素 ID'),
         updates: z
           .object({
@@ -41,9 +43,9 @@ export function registerUpdateElement(server: McpServer): void {
           .describe('要更新的属性'),
       }),
     },
-    async ({ id, updates }) => {
+    async ({ sessionId, id, updates }) => {
       try {
-        const session = getSession()
+        const session = getSession(sessionId)
         const element = session.elements.find((el) => el.id === id)
 
         if (!element) {
@@ -51,7 +53,7 @@ export function registerUpdateElement(server: McpServer): void {
             content: [
               {
                 type: 'text',
-                text: `❌ 未找到元素: ${id}`,
+                text: `❌ 未找到元素: ${id} (会话: ${session.id})`,
               },
             ],
             isError: true,
@@ -66,8 +68,8 @@ export function registerUpdateElement(server: McpServer): void {
         // 更新会话
         updateSession(session)
 
-        // 广播到浏览器
-        broadcast({
+        // 广播到同一会话的浏览器
+        broadcastToSession(session.id, {
           type: 'update',
           elements: session.elements,
           appState: session.appState,
@@ -77,7 +79,9 @@ export function registerUpdateElement(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: `✅ 元素已更新: ${id}\n\n` + `更新的属性: ${Object.keys(updates).join(', ')}`,
+              text:
+                `✅ 元素已更新: ${id} (会话: ${session.id})\n\n` +
+                `更新的属性: ${Object.keys(updates).join(', ')}`,
             },
           ],
         }

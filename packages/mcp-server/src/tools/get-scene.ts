@@ -20,12 +20,15 @@ export function registerGetScene(server: McpServer): void {
         '使用场景:\n' +
         '- 查看当前图表内容\n' +
         '- 分析场景结构\n' +
-        '- 获取元素 ID 进行更新/删除',
-      inputSchema: z.object({}),
+        '- 获取元素 ID 进行更新/删除\n\n' +
+        '多会话支持：通过 sessionId 指定要查询的会话。',
+      inputSchema: z.object({
+        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
+      }),
     },
-    async () => {
+    async ({ sessionId }) => {
       try {
-        const session = getSession()
+        const session = getSession(sessionId)
 
         // 过滤掉已删除的元素
         const activeElements = session.elements.filter((el) => !el.isDeleted)
@@ -48,6 +51,7 @@ export function registerGetScene(server: McpServer): void {
                 `═══════════════════\n\n` +
                 `Session ID: ${session.id}\n` +
                 `版本号: ${session.version}\n` +
+                `最后更新: ${session.lastUpdated.toISOString()}\n` +
                 `活跃元素数: ${activeElements.length}\n` +
                 `总元素数: ${session.elements.length}\n\n` +
                 `元素类型统计:\n${Object.entries(elementTypes)

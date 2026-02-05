@@ -3,7 +3,7 @@ import { z } from 'zod'
 import fs from 'fs'
 import path from 'path'
 import { getSession } from '../state.js'
-import { getClientCount, requestExport } from '../websocket.js'
+import { getSessionClientCount, requestExport } from '../websocket.js'
 import { log } from '../logger.js'
 
 /**
@@ -18,15 +18,17 @@ export function registerExport(server: McpServer): void {
         '注意:\n' +
         '- JSON 格式由服务器直接保存\n' +
         '- PNG/SVG 由浏览器生成并回传到服务器保存\n' +
-        '- 需要先启动 start_session 并保持浏览器连接',
+        '- 需要先启动 start_session 并保持浏览器连接\n\n' +
+        '多会话支持：通过 sessionId 指定要导出的会话。',
       inputSchema: z.object({
+        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
         path: z.string().describe('保存路径 (包含文件名)'),
         format: z.enum(['png', 'svg', 'json']).default('json').describe('导出格式'),
       }),
     },
-    async ({ path: filePath, format }) => {
+    async ({ sessionId, path: filePath, format }) => {
       try {
-        const session = getSession()
+        const session = getSession(sessionId)
 
         // 确保路径有正确扩展名
         const ext = `.${format}`
@@ -59,18 +61,19 @@ export function registerExport(server: McpServer): void {
                   `✅ 图表已导出!\n\n` +
                   `路径: ${finalPath}\n` +
                   `格式: ${format.toUpperCase()}\n` +
+                  `会话: ${session.id}\n` +
                   `元素数: ${session.elements.length}`,
               },
             ],
           }
         }
 
-        if (getClientCount() === 0) {
+        if (getSessionClientCount(session.id) === 0) {
           return {
             content: [
               {
                 type: 'text',
-                text: `❌ 未检测到浏览器会话，请先调用 start_session。`,
+                text: `❌ 未检测到浏览器会话，请先使用 start_session 启动会话: ${session.id}`,
               },
             ],
             isError: true,
@@ -79,6 +82,7 @@ export function registerExport(server: McpServer): void {
 
         const exportFormat = format === 'png' ? 'png' : 'svg'
         const data = await requestExport({
+          sessionId: session.id,
           format: exportFormat,
           elements: session.elements,
           appState: session.appState,
@@ -102,6 +106,7 @@ export function registerExport(server: McpServer): void {
                 `✅ 图表已导出!\n\n` +
                 `路径: ${finalPath}\n` +
                 `格式: ${format.toUpperCase()}\n` +
+                `会话: ${session.id}\n` +
                 `元素数: ${session.elements.length}`,
             },
           ],

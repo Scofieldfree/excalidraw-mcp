@@ -1,11 +1,23 @@
 import { Excalidraw, exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+/**
+ * 从 URL 参数获取 sessionId
+ */
+function getSessionId(): string {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('sessionId') || 'default'
+}
+
+/**
+ * 构建 WebSocket URL（包含 sessionId）
+ */
 function getWebSocketUrl(): string {
   const { protocol, host } = window.location
   const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${wsProtocol}//${host}`
+  const sessionId = getSessionId()
+  return `${wsProtocol}//${host}?sessionId=${encodeURIComponent(sessionId)}`
 }
 
 export default function App() {
@@ -16,6 +28,10 @@ export default function App() {
   const reconnectTimerRef = useRef<number | null>(null)
   const heartbeatTimerRef = useRef<number | null>(null)
   const isMountedRef = useRef(true)
+
+  // 当前会话 ID 状态（用于显示）
+  const [currentSessionId, setCurrentSessionId] = useState(getSessionId())
+  const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -126,10 +142,12 @@ export default function App() {
 
       ws.addEventListener('open', () => {
         reconnectDelayRef.current = 2000
+        setIsConnected(true)
         startHeartbeat()
       })
 
       ws.addEventListener('close', () => {
+        setIsConnected(false)
         stopHeartbeat()
         scheduleReconnect()
       })
@@ -146,6 +164,10 @@ export default function App() {
             return
           }
           if (msg.type === 'init' || msg.type === 'update') {
+            // 更新当前会话 ID
+            if (msg.sessionId) {
+              setCurrentSessionId(msg.sessionId)
+            }
             isRemoteUpdateRef.current = true
             excalidrawRef.current?.updateScene({
               elements: msg.elements || [],
@@ -175,30 +197,51 @@ export default function App() {
   }, [])
 
   return (
-    <div style={{ height: '100vh', width: '100vw' }}>
-      <Excalidraw
-        excalidrawAPI={(api) => {
-          excalidrawRef.current = api
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column' }}>
+      {/* 顶部状态栏 */}
+      <div
+        style={{
+          padding: '8px 16px',
+          background: isConnected ? '#10b981' : '#ef4444',
+          color: 'white',
+          fontSize: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
-        onChange={(elements, appState) => {
-          if (isRemoteUpdateRef.current) {
-            return
-          }
+      >
+        <span>
+          Session: <strong>{currentSessionId}</strong>
+        </span>
+        <span>{isConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+      </div>
 
-          const ws = wsRef.current
-          if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return
-          }
+      {/* Excalidraw 画布 */}
+      <div style={{ flex: 1 }}>
+        <Excalidraw
+          excalidrawAPI={(api) => {
+            excalidrawRef.current = api
+          }}
+          onChange={(elements, appState) => {
+            if (isRemoteUpdateRef.current) {
+              return
+            }
 
-          ws.send(
-            JSON.stringify({
-              type: 'update',
-              elements,
-              appState,
-            }),
-          )
-        }}
-      />
+            const ws = wsRef.current
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+              return
+            }
+
+            ws.send(
+              JSON.stringify({
+                type: 'update',
+                elements,
+                appState,
+              }),
+            )
+          }}
+        />
+      </div>
     </div>
   )
 }

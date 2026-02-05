@@ -1,6 +1,6 @@
 /**
- * 会话状态管理
- * 管理 Excalidraw 图表的 session、elements 和 appState
+ * 多会话状态管理
+ * 支持同时管理多个 Excalidraw 图表会话
  */
 
 export interface Session {
@@ -8,6 +8,7 @@ export interface Session {
   elements: ExcalidrawElement[]
   appState: AppState
   version: number
+  lastUpdated: Date
 }
 
 export interface ExcalidrawElement {
@@ -91,50 +92,159 @@ export interface AppState {
   [key: string]: any
 }
 
-let currentSession: Session | null = null
+// 多会话存储
+const sessions = new Map<string, Session>()
+
+// 默认会话 ID（向后兼容）
+const DEFAULT_SESSION_ID = 'default'
+
+// 会话过期时间（1小时）
+const SESSION_TTL = 60 * 60 * 1000
+
+/**
+ * 创建默认的 AppState
+ */
+function createDefaultAppState(): AppState {
+  return {
+    viewBackgroundColor: '#ffffff',
+    currentItemStrokeColor: '#1e1e1e',
+    currentItemBackgroundColor: 'transparent',
+    currentItemFillStyle: 'solid',
+    currentItemStrokeWidth: 2,
+    currentItemRoughness: 1,
+    zoom: { value: 1 },
+  }
+}
+
+/**
+ * 验证 sessionId 格式
+ * 防止恶意输入
+ */
+function isValidSessionId(sessionId: string): boolean {
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)
+}
 
 /**
  * 创建新会话
  */
-export function createSession(): Session {
-  currentSession = {
-    id: crypto.randomUUID(),
-    elements: [],
-    appState: {
-      viewBackgroundColor: '#ffffff',
-      currentItemStrokeColor: '#1e1e1e',
-      currentItemBackgroundColor: 'transparent',
-      currentItemFillStyle: 'solid',
-      currentItemStrokeWidth: 2,
-      currentItemRoughness: 1,
-      zoom: { value: 1 },
-    },
-    version: 0,
+export function createSession(sessionId?: string): Session {
+  const id = sessionId || `mcp-${crypto.randomUUID().slice(0, 8)}`
+
+  if (!isValidSessionId(id)) {
+    throw new Error(
+      `Invalid session ID: ${id}. Must be alphanumeric with hyphens/underscores, max 64 chars.`,
+    )
   }
-  return currentSession
+
+  const session: Session = {
+    id,
+    elements: [],
+    appState: createDefaultAppState(),
+    version: 0,
+    lastUpdated: new Date(),
+  }
+
+  sessions.set(id, session)
+  return session
 }
 
 /**
- * 获取当前会话
- * 如果没有会话，自动创建一个
+ * 获取会话
+ * 如果会话不存在且 autoCreate 为 true，则自动创建
  */
-export function getSession(): Session {
-  if (!currentSession) {
-    return createSession()
+export function getSession(sessionId?: string, autoCreate = true): Session {
+  const id = sessionId || DEFAULT_SESSION_ID
+
+  let session = sessions.get(id)
+
+  if (!session && autoCreate) {
+    session = createSession(id)
   }
-  return currentSession
+
+  if (!session) {
+    throw new Error(`Session not found: ${id}`)
+  }
+
+  return session
+}
+
+/**
+ * 检查会话是否存在
+ */
+export function hasSession(sessionId: string): boolean {
+  return sessions.has(sessionId)
 }
 
 /**
  * 更新会话
  */
 export function updateSession(session: Session): void {
-  currentSession = session
+  session.lastUpdated = new Date()
+  sessions.set(session.id, session)
 }
 
 /**
- * 清空会话
+ * 删除会话
+ */
+export function deleteSession(sessionId: string): boolean {
+  return sessions.delete(sessionId)
+}
+
+/**
+ * 清空所有会话
+ */
+export function clearAllSessions(): void {
+  sessions.clear()
+}
+
+/**
+ * 获取所有会话列表
+ */
+export function listSessions(): Array<{ id: string; elementCount: number; lastUpdated: Date }> {
+  return Array.from(sessions.values()).map((s) => ({
+    id: s.id,
+    elementCount: s.elements.length,
+    lastUpdated: s.lastUpdated,
+  }))
+}
+
+/**
+ * 清理过期会话
+ */
+export function cleanupExpiredSessions(): number {
+  const now = Date.now()
+  let cleaned = 0
+
+  for (const [id, session] of sessions) {
+    // 不清理默认会话
+    if (id === DEFAULT_SESSION_ID) continue
+
+    if (now - session.lastUpdated.getTime() > SESSION_TTL) {
+      sessions.delete(id)
+      cleaned++
+    }
+  }
+
+  return cleaned
+}
+
+// 定期清理过期会话（每5分钟）
+setInterval(cleanupExpiredSessions, 5 * 60 * 1000)
+
+// ============================================================
+// 向后兼容的旧 API（使用默认会话）
+// ============================================================
+
+/**
+ * @deprecated 使用 getSession(sessionId) 代替
+ */
+export function getCurrentSession(): Session {
+  return getSession(DEFAULT_SESSION_ID)
+}
+
+/**
+ * @deprecated 使用 clearAllSessions() 或 deleteSession(id) 代替
  */
 export function clearSession(): void {
-  currentSession = null
+  deleteSession(DEFAULT_SESSION_ID)
 }
