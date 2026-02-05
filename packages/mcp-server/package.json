@@ -1,7 +1,10 @@
 {
-  "name": "@excalidraw-mcp/server",
+  "name": "@scofieldfree/excalidraw-mcp",
   "version": "0.1.0",
   "description": "MCP server for Excalidraw - AI-powered diagram generation with real-time browser preview",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "excalidraw-mcp": "./dist/index.js"
