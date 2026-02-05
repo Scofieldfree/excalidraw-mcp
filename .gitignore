@@ -14,7 +14,6 @@ out/
 
 # IDE & Editors
 .idea/
-.vscode/
 *.swp
 *.swo
 *~
@@ -74,3 +73,4 @@ temp/
 .agent/
 .mcp.json
 docs/
+**/web/web-dist/
