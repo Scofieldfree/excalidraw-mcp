@@ -69,6 +69,7 @@ const ExcalidrawElementSchema = z.object({
   link: z.string().optional().describe('超链接'),
   locked: z.boolean().optional().describe('是否锁定'),
   groupIds: z.array(z.string()).optional().describe('分组 ID 列表'),
+  containerId: z.string().nullable().optional().describe('所属容器 ID (用于文本绑定)'),
   frameId: z.string().nullable().optional().describe('所属 frameId'),
   fileId: z.string().nullable().optional().describe('图片文件 ID'),
   status: z.enum(['pending', 'saved', 'error']).optional().describe('图片状态'),
@@ -127,6 +128,19 @@ export function registerAddElements(server: McpServer): void {
         // 转换为完整的 Excalidraw 元素格式
         const newElements = elements.map((el) => createExcalidrawElement(el))
 
+        // 自动处理双向绑定：如果 text 元素有 containerId，则将其 ID 添加到容器的 boundElements 中
+        newElements.forEach((el) => {
+          if (el.type === 'text' && (el as any).containerId) {
+            const containerId = (el as any).containerId
+            const container = newElements.find((e) => e.id === containerId)
+            if (container) {
+              const bound = (container.boundElements || []) as any[]
+              bound.push({ type: 'text', id: el.id })
+              container.boundElements = bound as any
+            }
+          }
+        })
+
         // 更新状态
         session.elements.push(...newElements)
         session.version++
@@ -176,8 +190,19 @@ function toScaleTuple(scale: number[] | undefined): [number, number] {
 function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>) {
   const id = input.id || crypto.randomUUID()
   const now = Date.now()
-  const width = input.width || 100
-  const height = input.height || 100
+  // 默认尺寸逻辑：文本元素根据内容估算，其他元素默认为 100
+  let defaultWidth = 100
+  let defaultHeight = 100
+
+  if (input.type === 'text' && input.text) {
+    const fontSize = input.fontSize || 20
+    // 估算公式：字符数 * 字号 * 0.6 (平均宽高比) + 10px buffer
+    defaultWidth = input.text.length * fontSize * 0.6 + 10
+    defaultHeight = fontSize * 1.25
+  }
+
+  const width = input.width || defaultWidth
+  const height = input.height || defaultHeight
 
   const base = {
     id,
@@ -218,7 +243,7 @@ function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>)
       fontFamily: 1,
       textAlign: input.textAlign || 'center',
       verticalAlign: input.verticalAlign || 'middle',
-      containerId: null,
+      containerId: input.containerId ?? null,
       originalText: text,
       autoResize: true,
       lineHeight: 1.25,
