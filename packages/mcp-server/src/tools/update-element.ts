@@ -70,6 +70,7 @@ export function registerUpdateElement(server: McpServer): void {
         broadcast({
           type: 'update',
           elements: session.elements,
+          appState: session.appState,
         })
 
         return {

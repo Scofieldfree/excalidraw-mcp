@@ -40,6 +40,9 @@ export function startWebSocket(server: any): void {
           // 用户手动编辑，更新状态
           const session = getSession()
           session.elements = msg.elements
+          if (msg.appState) {
+            session.appState = msg.appState
+          }
           session.version++
           updateSession(session)
 

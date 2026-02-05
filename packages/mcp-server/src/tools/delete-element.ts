@@ -50,6 +50,7 @@ export function registerDeleteElement(server: McpServer): void {
         broadcast({
           type: 'update',
           elements: session.elements,
+          appState: session.appState,
         })
 
         return {

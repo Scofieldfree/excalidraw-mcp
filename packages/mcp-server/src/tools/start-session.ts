@@ -24,7 +24,8 @@ export function registerStartSession(server: McpServer): void {
     async () => {
       try {
         const session = getSession()
-        const url = `http://localhost:3100`
+        const port = process.env.PORT || '3100'
+        const url = `http://localhost:${port}`
 
         log.info(`Opening browser at ${url}`)
 
