@@ -1,0 +1,30 @@
+{
+  "name": "excalidraw-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @excalidraw-mcp/server dev",
+    "build": "pnpm --filter @excalidraw-mcp/server build",
+    "start": "pnpm --filter @excalidraw-mcp/server start",
+    "prepare": "husky"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "devDependencies": {
+    "@commitlint/cli": "^20.4.1",
+    "@commitlint/config-conventional": "^20.4.1",
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^17.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.7.4",
+    "standard-version": "^9.5.0",
+    "typescript-eslint": "^8.53.0"
+  }
+}

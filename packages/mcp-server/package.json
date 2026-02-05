@@ -1,0 +1,58 @@
+{
+  "name": "@excalidraw-mcp/server",
+  "version": "0.1.0",
+  "description": "MCP server for Excalidraw - AI-powered diagram generation with real-time browser preview",
+  "type": "module",
+  "bin": {
+    "excalidraw-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "web-dist"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:web\"",
+    "dev:server": "tsx watch src/index.ts",
+    "dev:web": "vite --config vite.config.ts",
+    "build": "pnpm build:web && pnpm build:server",
+    "build:server": "tsup src/index.ts --format esm --dts --clean --outDir dist",
+    "build:web": "vite build --config vite.config.ts --outDir web-dist",
+    "start": "node dist/index.js",
+    "prepublishOnly": "pnpm build",
+    "preview": "npm pack --dry-run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "open": "^10.2.0",
+    "ws": "^8.19.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@types/node": "^20.19.31",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^8.2.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.21"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "excalidraw",
+    "diagram",
+    "ai",
+    "claude",
+    "cursor"
+  ],
+  "license": "MIT"
+}
