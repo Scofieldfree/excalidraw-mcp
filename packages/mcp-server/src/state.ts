@@ -23,23 +23,56 @@ export interface ExcalidrawElement {
   fillStyle: string
   strokeWidth: number
   strokeStyle: string
+  roundness: { type: number; value?: number } | null
   roughness: number
   opacity: number
   seed: number
   version: number
   versionNonce: number
+  index: string | null
   isDeleted: boolean
   groupIds: string[]
+  frameId: string | null
   boundElements: BoundElement[] | null
   updated: number
   link: string | null
   locked: boolean
+  customData?: Record<string, any>
   // 文本特有属性
   text?: string
   fontSize?: number
   fontFamily?: number
   textAlign?: string
   verticalAlign?: string
+  containerId?: string | null
+  originalText?: string
+  autoResize?: boolean
+  lineHeight?: number
+  // 线条/箭头
+  points?: [number, number][]
+  lastCommittedPoint?: [number, number] | null
+  startBinding?: { elementId: string; focus: number; gap: number } | null
+  endBinding?: { elementId: string; focus: number; gap: number } | null
+  startArrowhead?: string | null
+  endArrowhead?: string | null
+  elbowed?: boolean
+  // 自由绘制
+  pressures?: number[]
+  simulatePressure?: boolean
+  // 图片
+  fileId?: string | null
+  status?: 'pending' | 'saved' | 'error'
+  scale?: [number, number]
+  crop?: {
+    x: number
+    y: number
+    width: number
+    height: number
+    naturalWidth: number
+    naturalHeight: number
+  } | null
+  // Frame / Magicframe
+  name?: string | null
 }
 
 export interface BoundElement {
@@ -55,6 +88,7 @@ export interface AppState {
   currentItemStrokeWidth: number
   currentItemRoughness: number
   zoom: { value: number }
+  [key: string]: any
 }
 
 let currentSession: Session | null = null

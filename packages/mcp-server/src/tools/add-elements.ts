@@ -6,7 +6,20 @@ import { broadcast } from '../websocket.js'
 // Excalidraw 元素 Schema
 const ExcalidrawElementSchema = z.object({
   type: z
-    .enum(['rectangle', 'ellipse', 'diamond', 'arrow', 'text', 'line', 'freedraw'])
+    .enum([
+      'rectangle',
+      'ellipse',
+      'diamond',
+      'arrow',
+      'text',
+      'line',
+      'freedraw',
+      'image',
+      'iframe',
+      'embeddable',
+      'frame',
+      'magicframe',
+    ])
     .describe('元素类型'),
   x: z.number().describe('X 坐标'),
   y: z.number().describe('Y 坐标'),
@@ -14,11 +27,48 @@ const ExcalidrawElementSchema = z.object({
   height: z.number().optional().describe('高度'),
   strokeColor: z.string().optional().describe('边框颜色'),
   backgroundColor: z.string().optional().describe('背景颜色'),
-  fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).optional().describe('填充样式'),
+  fillStyle: z.enum(['solid', 'hachure', 'cross-hatch', 'zigzag']).optional().describe('填充样式'),
   strokeWidth: z.number().optional().describe('线条宽度'),
+  strokeStyle: z.enum(['solid', 'dashed', 'dotted']).optional().describe('线条样式'),
   roughness: z.number().optional().describe('粗糙度 (0=平滑, 1=轻微手绘, 2=强手绘)'),
   text: z.string().optional().describe('文本内容 (仅 text 类型)'),
   fontSize: z.number().optional().describe('字体大小'),
+  textAlign: z.enum(['left', 'center', 'right']).optional().describe('文本对齐'),
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional().describe('垂直对齐'),
+  points: z
+    .array(z.tuple([z.number(), z.number()]))
+    .optional()
+    .describe('线条/自由绘制点'),
+  pressures: z.array(z.number()).optional().describe('自由绘制压力数组'),
+  startArrowhead: z.string().optional().describe('起始箭头样式'),
+  endArrowhead: z.string().optional().describe('结束箭头样式'),
+  roundness: z
+    .object({
+      type: z.number(),
+      value: z.number().optional(),
+    })
+    .optional()
+    .describe('圆角信息'),
+  link: z.string().optional().describe('超链接'),
+  locked: z.boolean().optional().describe('是否锁定'),
+  groupIds: z.array(z.string()).optional().describe('分组 ID 列表'),
+  frameId: z.string().nullable().optional().describe('所属 frameId'),
+  fileId: z.string().nullable().optional().describe('图片文件 ID'),
+  status: z.enum(['pending', 'saved', 'error']).optional().describe('图片状态'),
+  scale: z.tuple([z.number(), z.number()]).optional().describe('图片缩放'),
+  crop: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number(),
+      height: z.number(),
+      naturalWidth: z.number(),
+      naturalHeight: z.number(),
+    })
+    .optional()
+    .describe('图片裁剪信息'),
+  name: z.string().nullable().optional().describe('frame 名称'),
+  customData: z.record(z.any()).optional().describe('自定义数据'),
 })
 
 /**
@@ -37,7 +87,10 @@ export function registerAddElements(server: McpServer): void {
         '- arrow: 箭头\n' +
         '- text: 文本\n' +
         '- line: 线条\n' +
-        '- freedraw: 自由绘制\n\n' +
+        '- freedraw: 自由绘制\n' +
+        '- image: 图片\n' +
+        '- frame/magicframe: 框架\n' +
+        '- iframe/embeddable: 嵌入内容\n\n' +
         '样式选项:\n' +
         '- strokeColor: 边框颜色 (如 #1e1e1e)\n' +
         '- backgroundColor: 背景颜色 (如 #D97706)\n' +
@@ -92,38 +145,108 @@ export function registerAddElements(server: McpServer): void {
 function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>) {
   const id = crypto.randomUUID()
   const now = Date.now()
+  const width = input.width || 100
+  const height = input.height || 100
 
-  return {
+  const base = {
     id,
     type: input.type,
     x: input.x,
     y: input.y,
-    width: input.width || 100,
-    height: input.height || 100,
+    width,
+    height,
     angle: 0,
     strokeColor: input.strokeColor || '#1e1e1e',
     backgroundColor: input.backgroundColor || 'transparent',
     fillStyle: input.fillStyle || 'solid',
     strokeWidth: input.strokeWidth || 2,
-    strokeStyle: 'solid',
+    strokeStyle: input.strokeStyle || 'solid',
+    roundness: input.roundness || null,
     roughness: input.roughness ?? 1,
     opacity: 100,
     seed: Math.floor(Math.random() * 100000),
     version: 1,
     versionNonce: Math.floor(Math.random() * 100000),
+    index: null,
     isDeleted: false,
-    groupIds: [],
+    groupIds: input.groupIds || [],
+    frameId: input.frameId ?? null,
     boundElements: null,
     updated: now,
-    link: null,
-    locked: false,
-    // 文本特有属性
-    ...(input.type === 'text' && {
-      text: input.text || '',
+    link: input.link ?? null,
+    locked: input.locked ?? false,
+    customData: input.customData,
+  }
+
+  if (input.type === 'text') {
+    const text = input.text || ''
+    return {
+      ...base,
+      text,
       fontSize: input.fontSize || 20,
       fontFamily: 1,
-      textAlign: 'center',
-      verticalAlign: 'middle',
-    }),
+      textAlign: input.textAlign || 'center',
+      verticalAlign: input.verticalAlign || 'middle',
+      containerId: null,
+      originalText: text,
+      autoResize: true,
+      lineHeight: 1.25,
+    }
   }
+
+  if (input.type === 'line' || input.type === 'arrow') {
+    const points = input.points || [
+      [0, 0],
+      [width, height],
+    ]
+    const linear = {
+      ...base,
+      points,
+      lastCommittedPoint: null,
+      startBinding: null,
+      endBinding: null,
+      startArrowhead: input.startArrowhead ?? null,
+      endArrowhead: input.endArrowhead ?? null,
+    }
+    if (input.type === 'arrow') {
+      return {
+        ...linear,
+        elbowed: false,
+      }
+    }
+    return linear
+  }
+
+  if (input.type === 'freedraw') {
+    const points = input.points || [
+      [0, 0],
+      [width, height],
+    ]
+    return {
+      ...base,
+      points,
+      pressures: input.pressures || points.map(() => 1),
+      simulatePressure: true,
+      lastCommittedPoint: null,
+    }
+  }
+
+  if (input.type === 'image') {
+    return {
+      ...base,
+      fileId: input.fileId ?? null,
+      status: input.status || 'pending',
+      scale: input.scale || [1, 1],
+      crop: input.crop || null,
+    }
+  }
+
+  if (input.type === 'frame' || input.type === 'magicframe') {
+    return {
+      ...base,
+      name: input.name ?? null,
+    }
+  }
+
+  return base
 }

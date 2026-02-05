@@ -16,7 +16,7 @@
     "dev:server": "tsx watch src/index.ts",
     "dev:web": "vite --config vite.config.ts",
     "build": "pnpm build:web && pnpm build:server",
-    "build:server": "tsup src/index.ts --format esm --dts --clean --outDir dist --tsconfig tsconfig.server.json",
+    "build:server": "tsup src/index.ts --format esm --dts --clean --outDir dist --tsconfig tsconfig.server.json  && rm -rf dist/tools",
     "build:web": "vite build --config vite.config.ts",
     "start": "node dist/index.js",
     "prepublishOnly": "pnpm build",
