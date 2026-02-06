@@ -4,6 +4,10 @@ import open from 'open'
 import { getSession, listSessions } from '../state.js'
 import { getServerPort } from '../http-server.js'
 import { log } from '../logger.js'
+import { getSessionClientCount } from '../websocket.js'
+
+const RECENT_OPEN_WINDOW_MS = 15000
+const recentSessionOpenAt = new Map<string, number>()
 
 /**
  * 启动浏览器预览会话
@@ -45,10 +49,22 @@ export function registerStartSession(server: McpServer): void {
         // URL 中携带 sessionId 参数
         const url = `http://${host}:${port}?sessionId=${encodeURIComponent(session.id)}`
 
-        log.info(`Opening browser at ${url}`)
+        const now = Date.now()
+        const clientCount = getSessionClientCount(session.id)
+        const lastOpenAt = recentSessionOpenAt.get(session.id) || 0
+        const openedRecently = now - lastOpenAt < RECENT_OPEN_WINDOW_MS
 
-        // 打开浏览器
-        await open(url, { wait: false })
+        if (clientCount === 0 && !openedRecently) {
+          log.info(`Opening browser at ${url}`)
+          // 打开浏览器
+          await open(url, { wait: false })
+          recentSessionOpenAt.set(session.id, now)
+        } else {
+          log.info(
+            `Skip opening browser for session ${session.id}: ` +
+              `clientCount=${clientCount}, openedRecently=${openedRecently}`,
+          )
+        }
 
         // 获取当前所有会话
         const allSessions = listSessions()
@@ -62,7 +78,7 @@ export function registerStartSession(server: McpServer): void {
               type: 'text',
               text:
                 `✅ Session started!\n\n` +
-                `Browser opened at: ${url}\n` +
+                `${clientCount > 0 || openedRecently ? 'Browser already active' : 'Browser opened'} at: ${url}\n` +
                 `Session ID: ${session.id}\n\n` +
                 `Active Sessions:\n${sessionList}\n\n` +
                 `You can now use the following tools (remember to pass sessionId):\n` +
