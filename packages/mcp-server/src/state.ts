@@ -14,31 +14,58 @@ export interface Session {
 export interface ExcalidrawElement {
   id: string
   type: string
-  x: number
-  y: number
-  width: number
-  height: number
-  angle: number
-  strokeColor: string
-  backgroundColor: string
-  fillStyle: string
-  strokeWidth: number
-  strokeStyle: string
-  roundness: { type: number; value?: number } | null
-  roughness: number
-  opacity: number
-  seed: number
-  version: number
-  versionNonce: number
-  index: string | null
-  isDeleted: boolean
-  groupIds: string[]
-  frameId: string | null
-  boundElements: BoundElement[] | null
-  updated: number
-  link: string | null
-  locked: boolean
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  angle?: number
+  strokeColor?: string
+  backgroundColor?: string
+  fillStyle?: string
+  strokeWidth?: number
+  strokeStyle?: string
+  roundness?: { type: number; value?: number } | null
+  roughness?: number
+  opacity?: number
+  seed?: number
+  version?: number
+  versionNonce?: number
+  index?: string | null
+  isDeleted?: boolean
+  groupIds?: string[]
+  frameId?: string | null
+  boundElements?: BoundElement[] | null
+  updated?: number
+  link?: string | null
+  locked?: boolean
   customData?: Record<string, any>
+  // skeleton / convert 相关属性
+  label?: {
+    text: string
+    fontSize?: number
+    fontFamily?: number
+    strokeColor?: string
+    textAlign?: 'left' | 'center' | 'right'
+    verticalAlign?: 'top' | 'middle' | 'bottom'
+  }
+  start?:
+    | { id: string }
+    | {
+        type: 'rectangle' | 'ellipse' | 'diamond' | 'text'
+        id?: string
+        text?: string
+        width?: number
+        height?: number
+      }
+  end?:
+    | { id: string }
+    | {
+        type: 'rectangle' | 'ellipse' | 'diamond' | 'text'
+        id?: string
+        text?: string
+        width?: number
+        height?: number
+      }
   // 文本特有属性
   text?: string
   fontSize?: number

@@ -89,7 +89,7 @@ export function registerUpdateElement(server: McpServer): void {
         // 更新元素属性
         Object.assign(element, updates)
         element.updated = Date.now()
-        element.version++
+        element.version = (element.version ?? 0) + 1
 
         // 更新会话
         updateSession(session)

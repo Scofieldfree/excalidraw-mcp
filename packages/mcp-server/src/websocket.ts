@@ -170,6 +170,34 @@ export function startWebSocket(server: any): void {
           return
         }
 
+        // 前端完成 skeleton 补全后回传完整元素
+        if (msg.type === 'elements_converted') {
+          if (!isValidElementsPayload(msg.elements)) {
+            return
+          }
+
+          const currentSessionId = clientSessions.get(ws) || 'default'
+          const session = getSession(currentSessionId)
+
+          session.elements = msg.elements as unknown as ExcalidrawElement[]
+          session.version++
+          updateSession(session)
+
+          // 同步给同会话其他客户端，避免发送方回环
+          broadcastToSession(
+            currentSessionId,
+            {
+              type: 'update',
+              sessionId: session.id,
+              elements: session.elements,
+              appState: session.appState,
+              version: session.version,
+            },
+            ws,
+          )
+          return
+        }
+
         // 更新画布
         if (msg.type === 'update') {
           if (!isValidElementsPayload(msg.elements)) {
@@ -254,6 +282,26 @@ export function getClientCount(): number {
  */
 export function getSessionClientCount(sessionId: string): number {
   return sessionClients.get(sessionId)?.size || 0
+}
+
+export async function waitForSessionClient(
+  sessionId: string,
+  timeoutMs = 5000,
+  pollIntervalMs = 100,
+): Promise<boolean> {
+  if (getSessionClientCount(sessionId) > 0) {
+    return true
+  }
+
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    if (getSessionClientCount(sessionId) > 0) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export function requestExport(payload: {

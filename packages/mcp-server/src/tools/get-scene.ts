@@ -64,7 +64,7 @@ export function registerGetScene(server: McpServer): void {
                 `Active Elements List:\n${activeElements
                   .map(
                     (el) =>
-                      `  • [${el.id.slice(0, 8)}] ${el.type} @ (${Math.round(el.x)}, ${Math.round(el.y)})`,
+                      `  • [${el.id.slice(0, 8)}] ${el.type} @ (${Math.round(el.x ?? 0)}, ${Math.round(el.y ?? 0)})`,
                   )
                   .join('\n')}`,
             },

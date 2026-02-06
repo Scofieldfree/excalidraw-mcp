@@ -1,7 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getSession, updateSession } from '../state.js'
-import { broadcastToSession } from '../websocket.js'
+import { broadcastToSession, waitForSessionClient } from '../websocket.js'
+
+const ArrowEndpointCreateSchema = z.object({
+  type: z.enum(['rectangle', 'ellipse', 'diamond', 'text']),
+  id: z.string().optional(),
+  text: z.string().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+})
+
+const ArrowEndpointRefSchema = z.object({
+  id: z.string(),
+})
 
 // Excalidraw Element Schema
 const ExcalidrawElementSchema = z.object({
@@ -35,6 +47,20 @@ const ExcalidrawElementSchema = z.object({
   strokeWidth: z.number().optional().describe('Stroke width'),
   strokeStyle: z.enum(['solid', 'dashed', 'dotted']).optional().describe('Stroke style'),
   roughness: z.number().optional().describe('Roughness (0=architect, 1=artist, 2=cartoonist)'),
+  opacity: z.number().optional().describe('Opacity'),
+  label: z
+    .object({
+      text: z.string().describe('Label text content'),
+      fontSize: z.number().optional(),
+      fontFamily: z.number().optional(),
+      strokeColor: z.string().optional(),
+      textAlign: z.enum(['left', 'center', 'right']).optional(),
+      verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+    })
+    .optional()
+    .describe(
+      'Text label for shapes (rectangle/ellipse/diamond/arrow). Automatically creates a bound text element in Excalidraw.',
+    ),
   text: z.string().optional().describe('Text content (only for text type)'),
   fontSize: z.number().optional().describe('Font size'),
   textAlign: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
@@ -44,6 +70,18 @@ const ExcalidrawElementSchema = z.object({
     .optional()
     .describe('Points for line/freedraw, format: [[x1,y1], [x2,y2], ...]'),
   pressures: z.array(z.number()).optional().describe('Pressures for freedraw'),
+  start: z
+    .union([ArrowEndpointCreateSchema, ArrowEndpointRefSchema])
+    .optional()
+    .describe(
+      'Start binding for arrows: either create a new shape endpoint or bind to an existing element by ID.',
+    ),
+  end: z
+    .union([ArrowEndpointCreateSchema, ArrowEndpointRefSchema])
+    .optional()
+    .describe(
+      'End binding for arrows: either create a new shape endpoint or bind to an existing element by ID.',
+    ),
   startArrowhead: z.string().optional().describe('Start arrowhead style'),
   endArrowhead: z.string().optional().describe('End arrowhead style'),
   startBinding: z
@@ -72,7 +110,11 @@ const ExcalidrawElementSchema = z.object({
   link: z.string().optional().describe('Hyperlink'),
   locked: z.boolean().optional().describe('Is locked'),
   groupIds: z.array(z.string()).optional().describe('Group IDs'),
-  containerId: z.string().nullable().optional().describe('Container ID (for text binding)'),
+  containerId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('DEPRECATED: Use "label" property instead. Container ID for text binding.'),
   frameId: z.string().nullable().optional().describe('Parent Frame ID'),
   fileId: z.string().nullable().optional().describe('Image file ID'),
   status: z.enum(['pending', 'saved', 'error']).optional().describe('Image status'),
@@ -118,6 +160,10 @@ export function registerAddElements(server: McpServer): void {
         '- fillStyle: solid/hachure/cross-hatch\n' +
         '- strokeWidth: 1-4\n' +
         '- roughness: 0=architect, 1=artist, 2=cartoonist\n\n' +
+        'Advanced options:\n' +
+        '- label: Auto-create bound text inside shape/arrow containers\n' +
+        '- start/end: Arrow endpoint binding to new or existing elements\n' +
+        '- containerId: DEPRECATED (use label instead)\n\n' +
         'Multi-session support: Specify sessionId to target a specific session.',
       inputSchema: z.object({
         sessionId: z
@@ -130,32 +176,36 @@ export function registerAddElements(server: McpServer): void {
     async ({ sessionId, elements }) => {
       try {
         const session = getSession(sessionId)
-
-        // 转换为完整的 Excalidraw 元素格式
-        const newElements = elements.map((el) => createExcalidrawElement(el))
-
-        // 自动处理双向绑定：如果 text 元素有 containerId，则将其 ID 添加到容器的 boundElements 中
-        newElements.forEach((el) => {
-          if (el.type === 'text' && (el as any).containerId) {
-            const containerId = (el as any).containerId
-            const container = newElements.find((e) => e.id === containerId)
-            if (container) {
-              const bound = (container.boundElements || []) as any[]
-              bound.push({ type: 'text', id: el.id })
-              container.boundElements = bound as any
-            }
+        const elementsWithId = elements.map((el) => ({
+          ...el,
+          id: el.id || crypto.randomUUID(),
+        }))
+        const elementIds = elementsWithId.map((el) => el.id)
+        const hasActiveClients = await waitForSessionClient(session.id, 10000)
+        if (!hasActiveClients) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text:
+                  `❌ No browser client connected for session "${session.id}" after waiting 10 seconds.\n\n` +
+                  `Please open the Excalidraw UI with ?sessionId=${session.id} and retry add_elements.`,
+              },
+            ],
+            isError: true,
           }
-        })
+        }
 
-        // 更新状态
-        session.elements.push(...newElements)
+        const skeletons = elementsWithId.map((el) => createElementSkeleton(el))
+
+        // 暂存骨架，等待前端回传完整元素后覆盖
+        session.elements.push(...(skeletons as any))
         session.version++
         updateSession(session)
 
-        // 广播到同一会话的浏览器
         broadcastToSession(session.id, {
-          type: 'update',
-          elements: session.elements,
+          type: 'add_elements',
+          skeletons,
           appState: session.appState,
         })
 
@@ -165,7 +215,7 @@ export function registerAddElements(server: McpServer): void {
               type: 'text',
               text:
                 `✅ Successfully added ${elements.length} elements to session "${session.id}"!\n\n` +
-                `Element IDs: ${newElements.map((e) => e.id).join(', ')}`,
+                `Element IDs: ${elementIds.join(', ')}`,
             },
           ],
         }
@@ -180,151 +230,70 @@ export function registerAddElements(server: McpServer): void {
   )
 }
 
-// 将 number[][] 转换为 [number, number][] 元组格式
-function toPointTuples(points: number[][] | undefined): [number, number][] {
-  if (!points) return []
-  return points.map((p) => [p[0] ?? 0, p[1] ?? 0] as [number, number])
-}
-
-// 将 number[] 转换为 [number, number] 元组格式
-function toScaleTuple(scale: number[] | undefined): [number, number] {
-  if (!scale) return [1, 1]
-  return [scale[0] ?? 1, scale[1] ?? 1]
-}
-
-// 创建完整的 Excalidraw 元素
-function createExcalidrawElement(input: z.infer<typeof ExcalidrawElementSchema>) {
-  const id = input.id || crypto.randomUUID()
-  const now = Date.now()
-  // 默认尺寸逻辑：文本元素根据内容估算，其他元素默认为 100
-  let defaultWidth = 100
-  let defaultHeight = 100
-
-  if (input.type === 'text' && input.text) {
-    const fontSize = input.fontSize || 20
-    // 估算公式：字符数 * 字号 * 0.6 (平均宽高比) + 10px buffer
-    defaultWidth = input.text.length * fontSize * 0.6 + 10
-    defaultHeight = fontSize * 1.25
-  }
-
-  const width = input.width || defaultWidth
-  const height = input.height || defaultHeight
-
-  const base = {
-    id,
+function createElementSkeleton(
+  input: z.infer<typeof ExcalidrawElementSchema> & { id: string },
+): Record<string, unknown> {
+  const skeleton: Record<string, unknown> = {
+    id: input.id,
     type: input.type,
     x: input.x,
     y: input.y,
-    width,
-    height,
-    angle: 0,
-    strokeColor: input.strokeColor || '#1e1e1e',
-    backgroundColor: input.backgroundColor || 'transparent',
-    fillStyle: input.fillStyle || 'solid',
-    strokeWidth: input.strokeWidth || 2,
-    strokeStyle: input.strokeStyle || 'solid',
-    roundness: input.roundness || null,
-    roughness: input.roughness ?? 1,
-    opacity: 100,
-    seed: Math.floor(Math.random() * 100000),
-    version: 1,
-    versionNonce: Math.floor(Math.random() * 100000),
-    index: null,
-    isDeleted: false,
-    groupIds: input.groupIds || [],
-    frameId: input.frameId ?? null,
-    boundElements: null,
-    updated: now,
-    link: input.link ?? null,
-    locked: input.locked ?? false,
-    customData: input.customData,
   }
 
+  if (input.width !== undefined) skeleton.width = input.width
+  if (input.height !== undefined) skeleton.height = input.height
+  if (input.strokeColor) skeleton.strokeColor = input.strokeColor
+  if (input.backgroundColor) skeleton.backgroundColor = input.backgroundColor
+  if (input.fillStyle) skeleton.fillStyle = input.fillStyle
+  if (input.strokeWidth !== undefined) skeleton.strokeWidth = input.strokeWidth
+  if (input.strokeStyle) skeleton.strokeStyle = input.strokeStyle
+  if (input.roughness !== undefined) skeleton.roughness = input.roughness
+  if (input.opacity !== undefined) skeleton.opacity = input.opacity
+  if (input.roundness) skeleton.roundness = input.roundness
+  if (input.groupIds?.length) skeleton.groupIds = input.groupIds
+  if (input.frameId !== undefined) skeleton.frameId = input.frameId
+  if (input.locked !== undefined) skeleton.locked = input.locked
+  if (input.link) skeleton.link = input.link
+  if (input.customData) skeleton.customData = input.customData
+  if (input.label) skeleton.label = input.label
+
   if (input.type === 'text') {
-    const text = input.text || ''
-    return {
-      ...base,
-      text,
-      fontSize: input.fontSize || 20,
-      fontFamily: 1,
-      textAlign: input.textAlign || 'center',
-      verticalAlign: input.verticalAlign || 'middle',
-      containerId: input.containerId ?? null,
-      originalText: text,
-      autoResize: true,
-      lineHeight: 1.25,
-    }
+    if (input.text !== undefined) skeleton.text = input.text
+    if (input.fontSize !== undefined) skeleton.fontSize = input.fontSize
+    if (input.textAlign !== undefined) skeleton.textAlign = input.textAlign
+    if (input.verticalAlign !== undefined) skeleton.verticalAlign = input.verticalAlign
+    if (input.containerId !== undefined) skeleton.containerId = input.containerId
   }
 
   if (input.type === 'line' || input.type === 'arrow') {
-    const points: [number, number][] = input.points
-      ? toPointTuples(input.points)
-      : [
-          [0, 0],
-          [width, height],
-        ]
-    const linear = {
-      ...base,
-      points,
-      lastCommittedPoint: null,
-      startBinding: input.startBinding
-        ? {
-            elementId: input.startBinding.elementId,
-            focus: input.startBinding.focus || 0,
-            gap: input.startBinding.gap || 1,
-          }
-        : null,
-      endBinding: input.endBinding
-        ? {
-            elementId: input.endBinding.elementId,
-            focus: input.endBinding.focus || 0,
-            gap: input.endBinding.gap || 1,
-          }
-        : null,
-      startArrowhead: input.startArrowhead ?? null,
-      endArrowhead: input.endArrowhead ?? null,
-    }
-    if (input.type === 'arrow') {
-      return {
-        ...linear,
-        elbowed: false,
-      }
-    }
-    return linear
+    if (input.points) skeleton.points = input.points
+    if (input.startArrowhead !== undefined) skeleton.startArrowhead = input.startArrowhead
+    if (input.endArrowhead !== undefined) skeleton.endArrowhead = input.endArrowhead
+    if (input.startBinding) skeleton.startBinding = input.startBinding
+    if (input.endBinding) skeleton.endBinding = input.endBinding
+    if (input.start) skeleton.start = input.start
+    if (input.end) skeleton.end = input.end
   }
 
   if (input.type === 'freedraw') {
-    const points: [number, number][] = input.points
-      ? toPointTuples(input.points)
-      : [
-          [0, 0],
-          [width, height],
-        ]
-    return {
-      ...base,
-      points,
-      pressures: input.pressures || points.map(() => 1),
-      simulatePressure: true,
-      lastCommittedPoint: null,
-    }
+    if (input.points) skeleton.points = input.points
+    if (input.pressures) skeleton.pressures = input.pressures
   }
 
   if (input.type === 'image') {
-    return {
-      ...base,
-      fileId: input.fileId ?? null,
-      status: input.status || 'pending',
-      scale: toScaleTuple(input.scale),
-      crop: input.crop || null,
-    }
+    if (input.fileId !== undefined) skeleton.fileId = input.fileId
+    if (input.status !== undefined) skeleton.status = input.status
+    if (input.scale) skeleton.scale = input.scale
+    if (input.crop) skeleton.crop = input.crop
   }
 
   if (input.type === 'frame' || input.type === 'magicframe') {
-    return {
-      ...base,
-      name: input.name ?? null,
-    }
+    if (input.name !== undefined) skeleton.name = input.name
   }
 
-  return base
+  if (input.containerId !== undefined && input.type !== 'text') {
+    skeleton.containerId = input.containerId
+  }
+
+  return skeleton
 }

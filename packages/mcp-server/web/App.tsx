@@ -1,4 +1,9 @@
-import { Excalidraw, exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
+import {
+  Excalidraw,
+  exportToBlob,
+  exportToSvg,
+  convertToExcalidrawElements,
+} from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useEffect, useRef, useState } from 'react'
 
@@ -163,6 +168,43 @@ export default function App() {
             handleExport(msg)
             return
           }
+
+          // Handle skeleton elements from server
+          if (msg.type === 'add_elements') {
+            isRemoteUpdateRef.current = true
+
+            // Convert skeleton data to complete Excalidraw elements
+            const newElements = convertToExcalidrawElements(
+              msg.skeletons || [],
+              { regenerateIds: false }, // Preserve server-generated IDs
+            )
+
+            // Merge with existing elements
+            const currentElements = excalidrawRef.current?.getSceneElements() || []
+            const mergedElements = [...currentElements, ...newElements]
+
+            excalidrawRef.current?.updateScene({
+              elements: mergedElements,
+              appState: msg.appState ? { ...msg.appState, collaborators: new Map() } : undefined,
+            })
+
+            // Send converted elements back to server for session state update
+            const ws = wsRef.current
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(
+                JSON.stringify({
+                  type: 'elements_converted',
+                  elements: mergedElements,
+                }),
+              )
+            }
+
+            setTimeout(() => {
+              isRemoteUpdateRef.current = false
+            }, 0)
+            return
+          }
+
           if (msg.type === 'init' || msg.type === 'update') {
             // 更新当前会话 ID
             if (msg.sessionId) {
