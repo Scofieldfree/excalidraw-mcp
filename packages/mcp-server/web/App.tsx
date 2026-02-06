@@ -722,7 +722,9 @@ export default function App() {
             newElements.forEach((el) => {
               mergedById.set(el.id, el)
             })
-            const mergedElements = Array.from(mergedById.values())
+            const mergedElements = Array.from(mergedById.values()).map((el) =>
+              ensureLinearPoints(el as any),
+            )
 
             excalidrawRef.current?.updateScene({
               elements: mergedElements,
@@ -757,8 +759,11 @@ export default function App() {
               setCurrentSessionId(msg.sessionId)
             }
             isRemoteUpdateRef.current = true
+            const normalizedIncomingElements = (
+              Array.isArray(msg.elements) ? msg.elements : []
+            ).map((el: any) => ensureLinearPoints(el as any))
             excalidrawRef.current?.updateScene({
-              elements: msg.elements || [],
+              elements: normalizedIncomingElements,
               appState: msg.appState ? { ...msg.appState, collaborators: new Map() } : undefined,
             })
             setTimeout(() => {
@@ -829,7 +834,9 @@ export default function App() {
             ws.send(
               JSON.stringify({
                 type: 'update',
-                elements,
+                elements: elements.map((el) =>
+                  normalizeLinearElement(el as Record<string, unknown>),
+                ),
                 appState: safeAppState,
               }),
             )

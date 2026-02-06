@@ -208,6 +208,10 @@ export function startWebSocket(server: any): void {
 
     // 发送当前状态
     const session = getSession(sessionId)
+    const normalizedInitElements = normalizeElementsForStorage(
+      session.elements as unknown as Array<Record<string, unknown>>,
+    )
+    session.elements = normalizedInitElements as unknown as ExcalidrawElement[]
     ws.send(
       JSON.stringify({
         type: 'init',
@@ -239,6 +243,10 @@ export function startWebSocket(server: any): void {
           joinSession(ws, newSessionId)
 
           const session = getSession(newSessionId)
+          const normalizedInitElements = normalizeElementsForStorage(
+            session.elements as unknown as Array<Record<string, unknown>>,
+          )
+          session.elements = normalizedInitElements as unknown as ExcalidrawElement[]
           ws.send(
             JSON.stringify({
               type: 'init',
@@ -415,7 +423,17 @@ export function startWebSocket(server: any): void {
           updateSession(session)
 
           // 只广播给同一会话的其他客户端
-          broadcastToSession(currentSessionId, msg, ws)
+          broadcastToSession(
+            currentSessionId,
+            {
+              ...msg,
+              elements: session.elements,
+              appState: session.appState,
+              sessionId: session.id,
+              version: session.version,
+            },
+            ws,
+          )
         }
       } catch (error) {
         log.error('WebSocket message error:', error)
