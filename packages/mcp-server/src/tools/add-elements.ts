@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getSession, updateSession } from '../state.js'
-import { broadcastToSession, waitForSessionClient } from '../websocket.js'
+import { enqueueSkeletonBatch } from '../websocket.js'
 
 const ArrowEndpointCreateSchema = z.object({
   type: z.enum(['rectangle', 'ellipse', 'diamond', 'text']),
@@ -181,21 +181,6 @@ export function registerAddElements(server: McpServer): void {
           id: el.id || crypto.randomUUID(),
         }))
         const elementIds = elementsWithId.map((el) => el.id)
-        const hasActiveClients = await waitForSessionClient(session.id, 10000)
-        if (!hasActiveClients) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text:
-                  `❌ No browser client connected for session "${session.id}" after waiting 10 seconds.\n\n` +
-                  `Please open the Excalidraw UI with ?sessionId=${session.id} and retry add_elements.`,
-              },
-            ],
-            isError: true,
-          }
-        }
-
         const skeletons = elementsWithId.map((el) => createElementSkeleton(el))
 
         // 暂存骨架，等待前端回传完整元素后覆盖
@@ -203,11 +188,7 @@ export function registerAddElements(server: McpServer): void {
         session.version++
         updateSession(session)
 
-        broadcastToSession(session.id, {
-          type: 'add_elements',
-          skeletons,
-          appState: session.appState,
-        })
+        const batchId = enqueueSkeletonBatch(session.id, skeletons, session.appState)
 
         return {
           content: [
@@ -215,7 +196,8 @@ export function registerAddElements(server: McpServer): void {
               type: 'text',
               text:
                 `✅ Successfully added ${elements.length} elements to session "${session.id}"!\n\n` +
-                `Element IDs: ${elementIds.join(', ')}`,
+                `Element IDs: ${elementIds.join(', ')}\n` +
+                `Batch ID: ${batchId}`,
             },
           ],
         }

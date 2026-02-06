@@ -29,6 +29,8 @@ export default function App() {
   const excalidrawRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const isRemoteUpdateRef = useRef(false)
+  const processedBatchIdsRef = useRef<Set<string>>(new Set())
+  const lastAckedBatchIdRef = useRef<string | null>(null)
   const reconnectDelayRef = useRef(2000)
   const reconnectTimerRef = useRef<number | null>(null)
   const heartbeatTimerRef = useRef<number | null>(null)
@@ -149,6 +151,12 @@ export default function App() {
         reconnectDelayRef.current = 2000
         setIsConnected(true)
         startHeartbeat()
+        ws.send(
+          JSON.stringify({
+            type: 'ready',
+            lastAckedBatchId: lastAckedBatchIdRef.current,
+          }),
+        )
       })
 
       ws.addEventListener('close', () => {
@@ -171,6 +179,22 @@ export default function App() {
 
           // Handle skeleton elements from server
           if (msg.type === 'add_elements') {
+            const batchId = typeof msg.batchId === 'string' ? msg.batchId : null
+            const currentElements = excalidrawRef.current?.getSceneElements() || []
+            if (batchId && processedBatchIdsRef.current.has(batchId)) {
+              const ws = wsRef.current
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({
+                    type: 'elements_converted',
+                    batchId,
+                    elements: currentElements,
+                  }),
+                )
+              }
+              return
+            }
+
             isRemoteUpdateRef.current = true
 
             // Convert skeleton data to complete Excalidraw elements
@@ -179,9 +203,12 @@ export default function App() {
               { regenerateIds: false }, // Preserve server-generated IDs
             )
 
-            // Merge with existing elements
-            const currentElements = excalidrawRef.current?.getSceneElements() || []
-            const mergedElements = [...currentElements, ...newElements]
+            // Merge with existing elements and deduplicate by id to handle replayed batches
+            const mergedById = new Map(currentElements.map((el) => [el.id, el]))
+            newElements.forEach((el) => {
+              mergedById.set(el.id, el)
+            })
+            const mergedElements = Array.from(mergedById.values())
 
             excalidrawRef.current?.updateScene({
               elements: mergedElements,
@@ -194,9 +221,14 @@ export default function App() {
               ws.send(
                 JSON.stringify({
                   type: 'elements_converted',
+                  ...(batchId ? { batchId } : {}),
                   elements: mergedElements,
                 }),
               )
+            }
+            if (batchId) {
+              processedBatchIdsRef.current.add(batchId)
+              lastAckedBatchIdRef.current = batchId
             }
 
             setTimeout(() => {

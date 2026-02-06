@@ -21,6 +21,17 @@ const pendingExports = new Map<
   { resolve: (data: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }
 >()
 
+interface PendingSkeletonBatch {
+  batchId: string
+  skeletons: Array<Record<string, unknown>>
+  appState?: Record<string, unknown>
+  synced: boolean
+  createdAt: number
+}
+
+const pendingSkeletonBatches = new Map<string, PendingSkeletonBatch[]>()
+const MAX_PENDING_SKELETON_BATCHES = 200
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -36,6 +47,53 @@ function isValidElementsPayload(elements: unknown): elements is Array<Record<str
       typeof (el as { id?: unknown }).id === 'string' &&
       typeof (el as { type?: unknown }).type === 'string',
   )
+}
+
+function sendSkeletonBatch(
+  ws: WebSocket,
+  batch: Pick<PendingSkeletonBatch, 'batchId' | 'skeletons' | 'appState'>,
+): void {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return
+  }
+  ws.send(
+    JSON.stringify({
+      type: 'add_elements',
+      batchId: batch.batchId,
+      skeletons: batch.skeletons,
+      appState: batch.appState,
+    }),
+  )
+}
+
+function cleanupSkeletonBatches(sessionId: string): void {
+  const batches = pendingSkeletonBatches.get(sessionId)
+  if (!batches || batches.length <= MAX_PENDING_SKELETON_BATCHES) {
+    return
+  }
+  const synced = batches.filter((batch) => batch.synced)
+  const unsynced = batches.filter((batch) => !batch.synced)
+  const keepSynced = Math.max(0, MAX_PENDING_SKELETON_BATCHES - unsynced.length)
+  pendingSkeletonBatches.set(sessionId, [...synced.slice(-keepSynced), ...unsynced])
+}
+
+function markSkeletonBatchSynced(sessionId: string, batchId: string): void {
+  const batches = pendingSkeletonBatches.get(sessionId)
+  if (!batches) return
+  const batch = batches.find((item) => item.batchId === batchId)
+  if (!batch) return
+  batch.synced = true
+  cleanupSkeletonBatches(sessionId)
+}
+
+function replayPendingSkeletonBatches(sessionId: string, ws: WebSocket): void {
+  const batches = pendingSkeletonBatches.get(sessionId)
+  if (!batches?.length) return
+  batches
+    .filter((batch) => !batch.synced)
+    .forEach((batch) => {
+      sendSkeletonBatch(ws, batch)
+    })
 }
 
 /**
@@ -144,6 +202,16 @@ export function startWebSocket(server: any): void {
           return
         }
 
+        // 客户端就绪：重放该会话未同步的 skeleton batch
+        if (msg.type === 'ready') {
+          const currentSessionId = clientSessions.get(ws) || 'default'
+          if (typeof msg.lastAckedBatchId === 'string') {
+            markSkeletonBatchSynced(currentSessionId, msg.lastAckedBatchId)
+          }
+          replayPendingSkeletonBatches(currentSessionId, ws)
+          return
+        }
+
         // 导出结果
         if (msg.type === 'export_result') {
           const requestId = msg.requestId
@@ -178,6 +246,10 @@ export function startWebSocket(server: any): void {
 
           const currentSessionId = clientSessions.get(ws) || 'default'
           const session = getSession(currentSessionId)
+
+          if (typeof msg.batchId === 'string') {
+            markSkeletonBatchSynced(currentSessionId, msg.batchId)
+          }
 
           session.elements = msg.elements as unknown as ExcalidrawElement[]
           session.version++
@@ -284,24 +356,32 @@ export function getSessionClientCount(sessionId: string): number {
   return sessionClients.get(sessionId)?.size || 0
 }
 
-export async function waitForSessionClient(
+export function enqueueSkeletonBatch(
   sessionId: string,
-  timeoutMs = 5000,
-  pollIntervalMs = 100,
-): Promise<boolean> {
-  if (getSessionClientCount(sessionId) > 0) {
-    return true
+  skeletons: Array<Record<string, unknown>>,
+  appState?: Record<string, unknown>,
+): string {
+  const batchId = crypto.randomUUID()
+  const batch: PendingSkeletonBatch = {
+    batchId,
+    skeletons,
+    appState,
+    synced: false,
+    createdAt: Date.now(),
+  }
+  const batches = pendingSkeletonBatches.get(sessionId) || []
+  batches.push(batch)
+  pendingSkeletonBatches.set(sessionId, batches)
+  cleanupSkeletonBatches(sessionId)
+
+  const clients = sessionClients.get(sessionId)
+  if (clients?.size) {
+    clients.forEach((client) => {
+      sendSkeletonBatch(client, batch)
+    })
   }
 
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
-    if (getSessionClientCount(sessionId) > 0) {
-      return true
-    }
-  }
-
-  return false
+  return batchId
 }
 
 export function requestExport(payload: {
