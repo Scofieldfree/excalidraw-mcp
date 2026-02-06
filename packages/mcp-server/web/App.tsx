@@ -478,6 +478,19 @@ export default function App() {
       return textPlaced.map((el) => ensureLinearPoints(el))
     }
 
+    const centerSceneInViewport = (elements?: any[]) => {
+      const api = excalidrawRef.current
+      if (!api) return
+      const candidates = Array.isArray(elements) ? elements : api.getSceneElements()
+      const nonDeleted = candidates.filter((el) => !el?.isDeleted)
+      if (nonDeleted.length === 0) return
+      api.scrollToContent(nonDeleted, {
+        fitToViewport: true,
+        viewportZoomFactor: 0.9,
+        animate: false,
+      })
+    }
+
     const startHeartbeat = () => {
       if (heartbeatTimerRef.current) {
         window.clearInterval(heartbeatTimerRef.current)
@@ -624,6 +637,7 @@ export default function App() {
           elements: mergedElements,
           ...(result.files ? { files: result.files } : {}),
         })
+        centerSceneInViewport(mergedElements)
         setTimeout(() => {
           isRemoteUpdateRef.current = false
         }, 0)
@@ -730,6 +744,7 @@ export default function App() {
               elements: mergedElements,
               appState: msg.appState ? { ...msg.appState, collaborators: new Map() } : undefined,
             })
+            centerSceneInViewport(mergedElements)
 
             // Send converted elements back to server for session state update
             const ws = wsRef.current
@@ -766,6 +781,9 @@ export default function App() {
               elements: normalizedIncomingElements,
               appState: msg.appState ? { ...msg.appState, collaborators: new Map() } : undefined,
             })
+            if (msg.type === 'init') {
+              centerSceneInViewport(normalizedIncomingElements)
+            }
             setTimeout(() => {
               isRemoteUpdateRef.current = false
             }, 0)
