@@ -67,6 +67,7 @@ export function registerStartSession(server: McpServer): void {
                 `Active Sessions:\n${sessionList}\n\n` +
                 `You can now use the following tools (remember to pass sessionId):\n` +
                 `• add_elements - Add elements\n` +
+                `• create_from_mermaid - Build diagram from Mermaid\n` +
                 `• update_element - Update elements\n` +
                 `• delete_element - Delete elements\n` +
                 `• get_scene - Get current scene\n` +

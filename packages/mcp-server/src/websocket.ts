@@ -20,6 +20,17 @@ const pendingExports = new Map<
   string,
   { resolve: (data: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }
 >()
+interface PendingMermaidConversion {
+  requestId: string
+  sessionId: string
+  mermaidDiagram: string
+  reset: boolean
+  dispatched: boolean
+  resolve: (result: { sessionId: string; elementCount: number }) => void
+  reject: (error: Error) => void
+  timeout: NodeJS.Timeout
+}
+const pendingMermaidConversions = new Map<string, PendingMermaidConversion>()
 
 interface PendingSkeletonBatch {
   batchId: string
@@ -66,6 +77,25 @@ function sendSkeletonBatch(
   )
 }
 
+function sendMermaidConversionRequest(
+  ws: WebSocket,
+  request: Pick<PendingMermaidConversion, 'requestId' | 'sessionId' | 'mermaidDiagram' | 'reset'>,
+): boolean {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return false
+  }
+  ws.send(
+    JSON.stringify({
+      type: 'mermaid_convert',
+      requestId: request.requestId,
+      sessionId: request.sessionId,
+      mermaidDiagram: request.mermaidDiagram,
+      reset: request.reset,
+    }),
+  )
+  return true
+}
+
 function cleanupSkeletonBatches(sessionId: string): void {
   const batches = pendingSkeletonBatches.get(sessionId)
   if (!batches || batches.length <= MAX_PENDING_SKELETON_BATCHES) {
@@ -94,6 +124,18 @@ function replayPendingSkeletonBatches(sessionId: string, ws: WebSocket): void {
     .forEach((batch) => {
       sendSkeletonBatch(ws, batch)
     })
+}
+
+function replayPendingMermaidConversions(sessionId: string, ws: WebSocket): void {
+  pendingMermaidConversions.forEach((pending) => {
+    if (pending.sessionId !== sessionId || pending.dispatched) {
+      return
+    }
+    const sent = sendMermaidConversionRequest(ws, pending)
+    if (sent) {
+      pending.dispatched = true
+    }
+  })
 }
 
 /**
@@ -134,6 +176,12 @@ function removeClient(ws: WebSocket): void {
       clients.delete(ws)
       if (clients.size === 0) {
         sessionClients.delete(sessionId)
+        // 当前会话无在线客户端时，允许待处理 mermaid 请求在下次 ready 时重放
+        pendingMermaidConversions.forEach((pending) => {
+          if (pending.sessionId === sessionId) {
+            pending.dispatched = false
+          }
+        })
       }
     }
   }
@@ -209,6 +257,7 @@ export function startWebSocket(server: any): void {
             markSkeletonBatchSynced(currentSessionId, msg.lastAckedBatchId)
           }
           replayPendingSkeletonBatches(currentSessionId, ws)
+          replayPendingMermaidConversions(currentSessionId, ws)
           return
         }
 
@@ -267,6 +316,71 @@ export function startWebSocket(server: any): void {
             },
             ws,
           )
+          return
+        }
+
+        // 前端完成 Mermaid 转换后回传完整元素
+        if (msg.type === 'mermaid_converted') {
+          const requestId = msg.requestId
+          if (typeof requestId !== 'string' || !isValidElementsPayload(msg.elements)) {
+            return
+          }
+
+          const pending = pendingMermaidConversions.get(requestId)
+          if (!pending) {
+            return
+          }
+
+          const currentSessionId = clientSessions.get(ws) || 'default'
+          if (pending.sessionId !== currentSessionId) {
+            return
+          }
+
+          const session = getSession(currentSessionId)
+          session.elements = msg.elements as unknown as ExcalidrawElement[]
+          if (msg.appState && isPlainObject(msg.appState)) {
+            const { collaborators: _collaborators, ...safeAppState } = msg.appState as any
+            session.appState = {
+              ...session.appState,
+              ...(safeAppState as Partial<AppState>),
+            }
+          }
+          session.version++
+          updateSession(session)
+
+          clearTimeout(pending.timeout)
+          pendingMermaidConversions.delete(requestId)
+          pending.resolve({ sessionId: currentSessionId, elementCount: session.elements.length })
+
+          // 同步给同会话其他客户端，避免发送方回环
+          broadcastToSession(
+            currentSessionId,
+            {
+              type: 'update',
+              sessionId: session.id,
+              elements: session.elements,
+              appState: session.appState,
+              version: session.version,
+            },
+            ws,
+          )
+          return
+        }
+
+        if (msg.type === 'mermaid_convert_error') {
+          const requestId = msg.requestId
+          if (typeof requestId !== 'string') {
+            return
+          }
+          const pending = pendingMermaidConversions.get(requestId)
+          if (!pending) {
+            return
+          }
+          clearTimeout(pending.timeout)
+          pendingMermaidConversions.delete(requestId)
+          const errorMsg =
+            typeof msg.error === 'string' ? msg.error : 'Mermaid conversion failed on client'
+          pending.reject(new Error(errorMsg))
           return
         }
 
@@ -421,5 +535,52 @@ export function requestExport(payload: {
       reject(new Error('Export timed out'))
     }, timeoutMs)
     pendingExports.set(requestId, { resolve, reject, timeout })
+  })
+}
+
+export function requestMermaidConversion(payload: {
+  sessionId?: string
+  mermaidDiagram: string
+  reset?: boolean
+  timeoutMs?: number
+}): Promise<{ sessionId: string; elementCount: number }> {
+  const sessionId = payload.sessionId || 'default'
+  const requestId = crypto.randomUUID()
+  const timeoutMs = payload.timeoutMs ?? 30000
+  const reset = Boolean(payload.reset)
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingMermaidConversions.delete(requestId)
+      reject(
+        new Error(
+          `Mermaid conversion timed out after ${timeoutMs}ms. ` +
+            `Please call start_session, keep the UI tab open, and retry.`,
+        ),
+      )
+    }, timeoutMs)
+
+    const pending = {
+      requestId,
+      sessionId,
+      mermaidDiagram: payload.mermaidDiagram,
+      reset,
+      dispatched: false,
+      resolve,
+      reject,
+      timeout,
+    }
+    pendingMermaidConversions.set(requestId, pending)
+
+    const clients = sessionClients.get(sessionId)
+    if (!clients || clients.size === 0) {
+      return
+    }
+    clients.forEach((client) => {
+      const sent = sendMermaidConversionRequest(client, pending)
+      if (sent) {
+        pending.dispatched = true
+      }
+    })
   })
 }

@@ -4,6 +4,7 @@ import {
   exportToSvg,
   convertToExcalidrawElements,
 } from '@excalidraw/excalidraw'
+import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useEffect, useRef, useState } from 'react'
 
@@ -143,6 +144,110 @@ export default function App() {
       }
     }
 
+    const handleMermaidConvert = async (msg: {
+      requestId?: string
+      mermaidDiagram?: string
+      reset?: boolean
+    }) => {
+      const normalizeLinearElement = (element: any) => {
+        if (!element || typeof element !== 'object') {
+          return element
+        }
+
+        if (!['arrow', 'line', 'freedraw'].includes(element.type)) {
+          return element
+        }
+
+        const points = Array.isArray(element.points) ? element.points : []
+        const normalizedPoints = points.filter(
+          (point: unknown) =>
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            typeof point[0] === 'number' &&
+            typeof point[1] === 'number',
+        )
+        const safePoints =
+          normalizedPoints.length >= 2
+            ? normalizedPoints
+            : [
+                [0, 0],
+                [Math.max(Number(element.width) || 100, 40), Number(element.height) || 0],
+              ]
+
+        return {
+          ...element,
+          points: safePoints,
+          ...(element.type === 'freedraw'
+            ? {
+                pressures:
+                  Array.isArray(element.pressures) && element.pressures.length === safePoints.length
+                    ? element.pressures
+                    : Array(safePoints.length).fill(0.5),
+              }
+            : {}),
+        }
+      }
+
+      const requestId = typeof msg.requestId === 'string' ? msg.requestId : null
+      const mermaidDiagram = typeof msg.mermaidDiagram === 'string' ? msg.mermaidDiagram : null
+
+      if (!requestId || !mermaidDiagram) {
+        return
+      }
+
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return
+      }
+
+      try {
+        const result = await parseMermaidToExcalidraw(mermaidDiagram, {})
+        const parsedElements = Array.isArray(result.elements) ? result.elements : []
+        const convertedElements = convertToExcalidrawElements(parsedElements as any, {
+          regenerateIds: false,
+        }).map((el) => normalizeLinearElement(el))
+        const currentElements = msg.reset ? [] : excalidrawRef.current?.getSceneElements() || []
+
+        const mergedById = new Map(currentElements.map((el) => [el.id, el]))
+        convertedElements.forEach((el) => {
+          if (!el || typeof el.id !== 'string') {
+            return
+          }
+          mergedById.set(el.id, el)
+        })
+        const mergedElements = Array.from(mergedById.values())
+
+        isRemoteUpdateRef.current = true
+        excalidrawRef.current?.updateScene({
+          elements: mergedElements,
+          ...(result.files ? { files: result.files } : {}),
+        })
+        setTimeout(() => {
+          isRemoteUpdateRef.current = false
+        }, 0)
+
+        ws.send(
+          JSON.stringify({
+            type: 'mermaid_converted',
+            requestId,
+            elements: mergedElements,
+          }),
+        )
+      } catch (error) {
+        const rawMessage = error instanceof Error ? error.message : String(error)
+        const message = /parse|syntax|lexical|token|unexpected/i.test(rawMessage)
+          ? `Mermaid syntax error: ${rawMessage}`
+          : `Mermaid conversion failed: ${rawMessage || 'Unknown error'}`
+        ws.send(
+          JSON.stringify({
+            type: 'mermaid_convert_error',
+            requestId,
+            error: message,
+          }),
+        )
+      }
+    }
+
     const connect = () => {
       const ws = new WebSocket(getWebSocketUrl())
       wsRef.current = ws
@@ -174,6 +279,11 @@ export default function App() {
           const msg = JSON.parse(event.data)
           if (msg.type === 'export') {
             handleExport(msg)
+            return
+          }
+
+          if (msg.type === 'mermaid_convert') {
+            handleMermaidConvert(msg)
             return
           }
 
