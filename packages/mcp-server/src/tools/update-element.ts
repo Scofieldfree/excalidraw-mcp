@@ -11,21 +11,24 @@ export function registerUpdateElement(server: McpServer): void {
     'update_element',
     {
       description:
-        '更新已存在元素的属性。\n\n' +
-        '可更新的属性:\n' +
-        '- x, y: 位置坐标\n' +
-        '- width, height: 尺寸\n' +
-        '- strokeColor: 边框颜色\n' +
-        '- backgroundColor: 背景颜色\n' +
-        '- fillStyle: 填充样式\n' +
-        '- strokeWidth: 线条宽度\n' +
-        '- roughness: 粗糙度\n' +
-        '- opacity: 透明度\n' +
-        '- text: 文本内容 (仅 text 类型)\n\n' +
-        '多会话支持：通过 sessionId 指定要操作的会话。',
+        'Update attributes of an existing element.\n\n' +
+        'Updatable attributes:\n' +
+        '- x, y: Position coordinates\n' +
+        '- width, height: Dimensions\n' +
+        '- strokeColor: Stroke color\n' +
+        '- backgroundColor: Background color\n' +
+        '- fillStyle: Fill style\n' +
+        '- strokeWidth: Stroke width\n' +
+        '- roughness: Roughness\n' +
+        '- opacity: Opacity\n' +
+        '- text: Text content (only for text type)\n\n' +
+        'Multi-session support: Specify sessionId to target a specific session.',
       inputSchema: z.object({
-        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
-        id: z.string().describe('要更新的元素 ID'),
+        sessionId: z
+          .string()
+          .optional()
+          .describe('Session ID. If not provided, uses default session.'),
+        id: z.string().describe('Element ID to update'),
         updates: z
           .object({
             x: z.number().optional(),
@@ -63,7 +66,7 @@ export function registerUpdateElement(server: McpServer): void {
               })
               .optional(),
           })
-          .describe('要更新的属性'),
+          .describe('Attributes to update'),
       }),
     },
     async ({ sessionId, id, updates }) => {
@@ -76,7 +79,7 @@ export function registerUpdateElement(server: McpServer): void {
             content: [
               {
                 type: 'text',
-                text: `❌ 未找到元素: ${id} (会话: ${session.id})`,
+                text: `❌ Element not found: ${id} (Session: ${session.id})`,
               },
             ],
             isError: true,
@@ -103,8 +106,8 @@ export function registerUpdateElement(server: McpServer): void {
             {
               type: 'text',
               text:
-                `✅ 元素已更新: ${id} (会话: ${session.id})\n\n` +
-                `更新的属性: ${Object.keys(updates).join(', ')}`,
+                `✅ Element updated: ${id} (Session: ${session.id})\n\n` +
+                `Updated attributes: ${Object.keys(updates).join(', ')}`,
             },
           ],
         }

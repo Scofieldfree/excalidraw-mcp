@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getSession, updateSession } from '../state.js'
 import { broadcastToSession } from '../websocket.js'
 
-// Excalidraw 元素 Schema
+// Excalidraw Element Schema
 const ExcalidrawElementSchema = z.object({
   type: z
     .enum([
@@ -20,29 +20,32 @@ const ExcalidrawElementSchema = z.object({
       'frame',
       'magicframe',
     ])
-    .describe('元素类型'),
-  id: z.string().optional().describe('元素 ID'),
-  x: z.number().describe('X 坐标'),
-  y: z.number().describe('Y 坐标'),
-  width: z.number().optional().describe('宽度'),
-  height: z.number().optional().describe('高度'),
-  strokeColor: z.string().optional().describe('边框颜色'),
-  backgroundColor: z.string().optional().describe('背景颜色'),
-  fillStyle: z.enum(['solid', 'hachure', 'cross-hatch', 'zigzag']).optional().describe('填充样式'),
-  strokeWidth: z.number().optional().describe('线条宽度'),
-  strokeStyle: z.enum(['solid', 'dashed', 'dotted']).optional().describe('线条样式'),
-  roughness: z.number().optional().describe('粗糙度 (0=平滑, 1=轻微手绘, 2=强手绘)'),
-  text: z.string().optional().describe('文本内容 (仅 text 类型)'),
-  fontSize: z.number().optional().describe('字体大小'),
-  textAlign: z.enum(['left', 'center', 'right']).optional().describe('文本对齐'),
-  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional().describe('垂直对齐'),
+    .describe('Type of the element'),
+  id: z.string().optional().describe('Element ID'),
+  x: z.number().describe('X coordinate'),
+  y: z.number().describe('Y coordinate'),
+  width: z.number().optional().describe('Width'),
+  height: z.number().optional().describe('Height'),
+  strokeColor: z.string().optional().describe('Stroke color (e.g., #1e1e1e)'),
+  backgroundColor: z.string().optional().describe('Background color (e.g., transparent)'),
+  fillStyle: z
+    .enum(['solid', 'hachure', 'cross-hatch', 'zigzag'])
+    .optional()
+    .describe('Fill style'),
+  strokeWidth: z.number().optional().describe('Stroke width'),
+  strokeStyle: z.enum(['solid', 'dashed', 'dotted']).optional().describe('Stroke style'),
+  roughness: z.number().optional().describe('Roughness (0=architect, 1=artist, 2=cartoonist)'),
+  text: z.string().optional().describe('Text content (only for text type)'),
+  fontSize: z.number().optional().describe('Font size'),
+  textAlign: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional().describe('Vertical alignment'),
   points: z
     .array(z.array(z.number()))
     .optional()
-    .describe('线条/自由绘制点，格式: [[x1,y1], [x2,y2], ...]'),
-  pressures: z.array(z.number()).optional().describe('自由绘制压力数组'),
-  startArrowhead: z.string().optional().describe('起始箭头样式'),
-  endArrowhead: z.string().optional().describe('结束箭头样式'),
+    .describe('Points for line/freedraw, format: [[x1,y1], [x2,y2], ...]'),
+  pressures: z.array(z.number()).optional().describe('Pressures for freedraw'),
+  startArrowhead: z.string().optional().describe('Start arrowhead style'),
+  endArrowhead: z.string().optional().describe('End arrowhead style'),
   startBinding: z
     .object({
       elementId: z.string(),
@@ -50,7 +53,7 @@ const ExcalidrawElementSchema = z.object({
       gap: z.number().optional(),
     })
     .optional()
-    .describe('起始点绑定信息'),
+    .describe('Start point binding info'),
   endBinding: z
     .object({
       elementId: z.string(),
@@ -58,22 +61,22 @@ const ExcalidrawElementSchema = z.object({
       gap: z.number().optional(),
     })
     .optional()
-    .describe('结束点绑定信息'),
+    .describe('End point binding info'),
   roundness: z
     .object({
       type: z.number(),
       value: z.number().optional(),
     })
     .optional()
-    .describe('圆角信息'),
-  link: z.string().optional().describe('超链接'),
-  locked: z.boolean().optional().describe('是否锁定'),
-  groupIds: z.array(z.string()).optional().describe('分组 ID 列表'),
-  containerId: z.string().nullable().optional().describe('所属容器 ID (用于文本绑定)'),
-  frameId: z.string().nullable().optional().describe('所属 frameId'),
-  fileId: z.string().nullable().optional().describe('图片文件 ID'),
-  status: z.enum(['pending', 'saved', 'error']).optional().describe('图片状态'),
-  scale: z.array(z.number()).optional().describe('图片缩放，格式: [scaleX, scaleY]'),
+    .describe('Roundness info'),
+  link: z.string().optional().describe('Hyperlink'),
+  locked: z.boolean().optional().describe('Is locked'),
+  groupIds: z.array(z.string()).optional().describe('Group IDs'),
+  containerId: z.string().nullable().optional().describe('Container ID (for text binding)'),
+  frameId: z.string().nullable().optional().describe('Parent Frame ID'),
+  fileId: z.string().nullable().optional().describe('Image file ID'),
+  status: z.enum(['pending', 'saved', 'error']).optional().describe('Image status'),
+  scale: z.array(z.number()).optional().describe('Image scale, format: [scaleX, scaleY]'),
   crop: z
     .object({
       x: z.number(),
@@ -84,41 +87,44 @@ const ExcalidrawElementSchema = z.object({
       naturalHeight: z.number(),
     })
     .optional()
-    .describe('图片裁剪信息'),
-  name: z.string().nullable().optional().describe('frame 名称'),
-  customData: z.record(z.any()).optional().describe('自定义数据'),
+    .describe('Image crop info'),
+  name: z.string().nullable().optional().describe('Frame name'),
+  customData: z.record(z.any()).optional().describe('Custom data'),
 })
 
 /**
- * 批量添加 Excalidraw 元素到画布
+ * Batch add Excalidraw elements to canvas
  */
 export function registerAddElements(server: McpServer): void {
   server.registerTool(
     'add_elements',
     {
       description:
-        '批量添加 Excalidraw 元素到画布。\n\n' +
-        '支持的元素类型:\n' +
-        '- rectangle: 矩形\n' +
-        '- ellipse: 椭圆\n' +
-        '- diamond: 菱形\n' +
-        '- arrow: 箭头\n' +
-        '- text: 文本\n' +
-        '- line: 线条\n' +
-        '- freedraw: 自由绘制\n' +
-        '- image: 图片\n' +
-        '- frame/magicframe: 框架\n' +
-        '- iframe/embeddable: 嵌入内容\n\n' +
-        '样式选项:\n' +
-        '- strokeColor: 边框颜色 (如 #1e1e1e)\n' +
-        '- backgroundColor: 背景颜色 (如 #D97706)\n' +
-        '- fillStyle: 填充样式 (solid/hachure/cross-hatch)\n' +
-        '- strokeWidth: 线条宽度 (1-4)\n' +
-        '- roughness: 粗糙度 (0=平滑, 1=轻微手绘, 2=强手绘)\n\n' +
-        '多会话支持：通过 sessionId 指定要操作的会话。',
+        'Add multiple Excalidraw elements to the canvas.\n\n' +
+        'Supported element types:\n' +
+        '- rectangle\n' +
+        '- ellipse\n' +
+        '- diamond\n' +
+        '- arrow\n' +
+        '- text\n' +
+        '- line\n' +
+        '- freedraw\n' +
+        '- image\n' +
+        '- frame/magicframe\n' +
+        '- iframe/embeddable\n\n' +
+        'Style options:\n' +
+        '- strokeColor: e.g. #1e1e1e\n' +
+        '- backgroundColor: e.g. #D97706\n' +
+        '- fillStyle: solid/hachure/cross-hatch\n' +
+        '- strokeWidth: 1-4\n' +
+        '- roughness: 0=architect, 1=artist, 2=cartoonist\n\n' +
+        'Multi-session support: Specify sessionId to target a specific session.',
       inputSchema: z.object({
-        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
-        elements: z.array(ExcalidrawElementSchema).describe('要添加的元素数组'),
+        sessionId: z
+          .string()
+          .optional()
+          .describe('Session ID. If not provided, uses default session.'),
+        elements: z.array(ExcalidrawElementSchema).describe('Array of elements to add'),
       }),
     },
     async ({ sessionId, elements }) => {
@@ -158,8 +164,8 @@ export function registerAddElements(server: McpServer): void {
             {
               type: 'text',
               text:
-                `✅ 成功添加 ${elements.length} 个元素到会话 "${session.id}"！\n\n` +
-                `元素 IDs: ${newElements.map((e) => e.id).join(', ')}`,
+                `✅ Successfully added ${elements.length} elements to session "${session.id}"!\n\n` +
+                `Element IDs: ${newElements.map((e) => e.id).join(', ')}`,
             },
           ],
         }

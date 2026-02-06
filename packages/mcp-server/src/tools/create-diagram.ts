@@ -13,21 +13,26 @@ export function registerCreateDiagram(server: McpServer): void {
     'create_diagram',
     {
       description:
-        '创建新图表或清空现有会话。\n\n' +
-        '此操作将：\n' +
-        '1. 如果指定 sessionId，清空该会话的所有元素\n' +
-        '2. 如果不指定 sessionId，创建一个新会话\n' +
-        '3. 重置应用程序状态\n\n' +
-        '使用场景：\n' +
-        '• 开始新项目时（不指定 sessionId）\n' +
-        '• 需要清除现有图表时（指定 sessionId）\n' +
-        '• 创建多个独立图表时（每次指定不同的 sessionId）',
+        'Create a new diagram or clear an existing session.\n\n' +
+        'This action will:\n' +
+        '1. If a sessionId is specified, clear all elements in that session.\n' +
+        '2. If no sessionId is specified, create a new session.\n' +
+        '3. Reset the application state.\n\n' +
+        'Usage scenarios:\n' +
+        '• Starting a new project (no sessionId specified)\n' +
+        '• Clearing an existing diagram (sessionId specified)\n' +
+        '• Creating multiple independent diagrams (specify different sessionIds each time)',
       inputSchema: z.object({
         sessionId: z
           .string()
           .optional()
-          .describe('会话 ID。不指定则自动生成新会话。指定现有 ID 则清空该会话。'),
-        viewBackgroundColor: z.string().optional().describe('画布背景颜色 (默认: #ffffff)'),
+          .describe(
+            'Session ID. If not specified, a new session is automatically generated. If an existing ID is specified, that session is cleared.',
+          ),
+        viewBackgroundColor: z
+          .string()
+          .optional()
+          .describe('Canvas background color (default: #ffffff)'),
       }),
     },
     async ({ sessionId, viewBackgroundColor }) => {
@@ -72,11 +77,11 @@ export function registerCreateDiagram(server: McpServer): void {
             {
               type: 'text',
               text:
-                `✅ 图表已创建/重置！\n\n` +
+                `✅ Diagram created/reset!\n\n` +
                 `Session ID: ${session.id}\n` +
-                `背景颜色: ${session.appState.viewBackgroundColor}\n` +
-                `元素数量: ${session.elements.length}\n\n` +
-                `可以使用 add_elements 工具添加元素（记得传入 sessionId: "${session.id}"）。`,
+                `Background Color: ${session.appState.viewBackgroundColor}\n` +
+                `Element Count: ${session.elements.length}\n\n` +
+                `You can use the add_elements tool to add elements (remember to pass sessionId: "${session.id}").`,
             },
           ],
         }
@@ -95,11 +100,11 @@ export function registerCreateDiagram(server: McpServer): void {
     'delete_diagram',
     {
       description:
-        '删除指定的图表会话。\n\n' +
-        '注意：这会完全删除会话及其所有元素，不可恢复。\n' +
-        '如果只是想清空元素而保留会话，请使用 create_diagram 并指定 sessionId。',
+        'Delete the specified diagram session.\n\n' +
+        'Note: This will completely delete the session and all its elements, and cannot be undone.\n' +
+        'If you only want to clear elements but keep the session, use create_diagram and specify the sessionId.',
       inputSchema: z.object({
-        sessionId: z.string().describe('要删除的会话 ID'),
+        sessionId: z.string().describe('The Session ID to delete'),
       }),
     },
     async ({ sessionId }) => {
@@ -111,7 +116,7 @@ export function registerCreateDiagram(server: McpServer): void {
             content: [
               {
                 type: 'text',
-                text: `❌ 未找到会话: ${sessionId}`,
+                text: `❌ Session not found: ${sessionId}`,
               },
             ],
             isError: true,
@@ -124,7 +129,7 @@ export function registerCreateDiagram(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: `✅ 会话已删除: ${sessionId}`,
+              text: `✅ Session deleted: ${sessionId}`,
             },
           ],
         }

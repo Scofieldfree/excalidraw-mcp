@@ -11,15 +11,18 @@ export function registerDeleteElement(server: McpServer): void {
     'delete_element',
     {
       description:
-        '从画布中删除指定元素。\n\n' +
-        '使用场景:\n' +
-        '- 移除不需要的元素\n' +
-        '- 清理临时元素\n' +
-        '- 删除错误添加的元素\n\n' +
-        '多会话支持：通过 sessionId 指定要操作的会话。',
+        'Delete a specific element from the canvas.\n\n' +
+        'Usage scenarios:\n' +
+        '- Remove unwanted elements\n' +
+        '- Clean up temporary elements\n' +
+        '- Delete erroneously added elements\n\n' +
+        'Multi-session support: Specify sessionId to target a specific session.',
       inputSchema: z.object({
-        sessionId: z.string().optional().describe('会话 ID，不指定则使用默认会话'),
-        id: z.string().describe('要删除的元素 ID'),
+        sessionId: z
+          .string()
+          .optional()
+          .describe('Session ID. If not provided, uses default session.'),
+        id: z.string().describe('Element ID to delete'),
       }),
     },
     async ({ sessionId, id }) => {
@@ -32,7 +35,7 @@ export function registerDeleteElement(server: McpServer): void {
             content: [
               {
                 type: 'text',
-                text: `❌ 未找到元素: ${id} (会话: ${session.id})`,
+                text: `❌ Element not found: ${id} (Session: ${session.id})`,
               },
             ],
             isError: true,
@@ -60,8 +63,8 @@ export function registerDeleteElement(server: McpServer): void {
             {
               type: 'text',
               text:
-                `✅ 元素已删除: ${id} (会话: ${session.id})\n\n` +
-                `元素类型: ${deletedElement.type}`,
+                `✅ Element deleted: ${id} (Session: ${session.id})\n\n` +
+                `Element Type: ${deletedElement.type}`,
             },
           ],
         }

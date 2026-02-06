@@ -15,21 +15,23 @@ export function registerStartSession(server: McpServer): void {
     'start_session',
     {
       description:
-        '启动浏览器预览，打开 Excalidraw 图表编辑界面。\n\n' +
-        '支持多会话模式：\n' +
-        '- 不指定 sessionId：使用默认会话 (default)\n' +
-        '- 指定 sessionId：打开/创建指定会话\n' +
-        '- 可同时打开多个会话绘制不同的图\n\n' +
-        '调用此工具后：\n' +
-        '1. 浏览器窗口将自动打开\n' +
-        '2. 加载 Excalidraw 编辑器\n' +
-        '3. 建立 WebSocket 实时同步连接\n\n' +
-        '后续使用 add_elements、update_element 等工具时，请传入相同的 sessionId。',
+        'Start browser preview and open Excalidraw editor interface.\n\n' +
+        'Multi-session support:\n' +
+        '- No sessionId: Uses default session (default)\n' +
+        '- sessionId specified: Open/Create specific session\n' +
+        '- Multiple sessions can be opened simultaneously for different diagrams\n\n' +
+        'After calling this tool:\n' +
+        '1. Browser window opens automatically\n' +
+        '2. Excalidraw editor loads\n' +
+        '3. WebSocket realtime connection is established\n\n' +
+        'Please pass the same sessionId when using tools like add_elements, update_element subsequently.',
       inputSchema: z.object({
         sessionId: z
           .string()
           .optional()
-          .describe('会话 ID。不指定则使用默认会话。支持同时打开多个会话。'),
+          .describe(
+            'Session ID. If not provided, uses default session. Supports opening multiple sessions.',
+          ),
       }),
     },
     async ({ sessionId }) => {
@@ -60,15 +62,15 @@ export function registerStartSession(server: McpServer): void {
               type: 'text',
               text:
                 `✅ Session started!\n\n` +
-                `浏览器已打开: ${url}\n` +
+                `Browser opened at: ${url}\n` +
                 `Session ID: ${session.id}\n\n` +
-                `当前活跃会话:\n${sessionList}\n\n` +
-                `现在可以使用以下工具来操作图表（记得传入 sessionId）：\n` +
-                `• add_elements - 添加元素\n` +
-                `• update_element - 更新元素\n` +
-                `• delete_element - 删除元素\n` +
-                `• get_scene - 获取当前场景\n` +
-                `• export_diagram - 导出图表`,
+                `Active Sessions:\n${sessionList}\n\n` +
+                `You can now use the following tools (remember to pass sessionId):\n` +
+                `• add_elements - Add elements\n` +
+                `• update_element - Update elements\n` +
+                `• delete_element - Delete elements\n` +
+                `• get_scene - Get current scene\n` +
+                `• export_diagram - Export diagram`,
             },
           ],
         }
@@ -86,7 +88,7 @@ export function registerStartSession(server: McpServer): void {
   server.registerTool(
     'list_sessions',
     {
-      description: '列出当前所有活跃的 Excalidraw 会话。',
+      description: 'List all currently active Excalidraw sessions.',
       inputSchema: z.object({}),
     },
     async () => {
@@ -97,7 +99,7 @@ export function registerStartSession(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: '当前没有活跃的会话。使用 start_session 创建一个新会话。',
+              text: 'No active sessions. Use start_session to create a new session.',
             },
           ],
         }
@@ -114,7 +116,7 @@ export function registerStartSession(server: McpServer): void {
         content: [
           {
             type: 'text',
-            text: `当前活跃会话 (${sessions.length} 个):\n\n${list}`,
+            text: `Active Sessions (${sessions.length}):\n\n${list}`,
           },
         ],
       }

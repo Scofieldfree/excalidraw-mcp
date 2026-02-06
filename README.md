@@ -1,79 +1,82 @@
-# Excalidraw MCP Component
+# Excalidraw MCP Server
 
+[![npm version](https://img.shields.io/npm/v/@scofieldfree/excalidraw-mcp.svg)](https://www.npmjs.com/package/@scofieldfree/excalidraw-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An MCP (Model Context Protocol) server that enables AI agents to programmatically generate, edit, and view Excalidraw diagrams.
+An MCP (Model Context Protocol) server that empowers AI agents (like **Claude**, **Cursor**, **Windsurf**) to create, edit, and manage **Excalidraw** diagrams directly within your conversation.
+
+> **Why this exists**: Draw.io is great, but Excalidraw's hand-drawn aesthetic and JSON-based format are perfect for rapid, programmable diagramming. This server bridges standard MCP clients with a local Excalidraw instance.
 
 ## ✨ Features
 
-- **Diagram Generation**: Create new diagrams from text descriptions
-- **Real-time Preview**: View changes instantly in the browser
-- **Tool Integration**: Explicit tools for adding shapes, text, arrows, and more
-- **Bi-directional**: Changes in the browser sync back to the agent context
+- **Real-time Preview**: Changes appear instantly in a local browser window via WebSocket.
+- **Smart Layout**: Automatically calculates text width and binds labels to containers.
+- **Multi-Session**: Switch between different diagrams (architecture, data-flow) seamlessly.
+- **Standard Toolset**: `add_elements`, `update_element`, `export_diagram` (PNG/JSON).
 
-## 📦 Components
+## 🚀 Quick Start (For Users)
 
-- **@excalidraw-mcp/server**: The core MCP server implementation with embedded HTTP/WebSocket server.
+You don't need to clone this repo. Just use `npx`:
 
-## 🚀 Quick Start
+### 1. Claude Desktop
 
-### Prerequisites
-
-- Node.js >= 18
-- pnpm >= 9
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/your-username/excalidraw-mcp.git
-cd excalidraw-mcp
-
-# Install dependencies
-pnpm install
-
-# Build packages
-pnpm build
-```
-
-### Running Locally
-
-```bash
-# Start the MCP server (includes web interface)
-pnpm dev
-```
-
-Visit `http://localhost:3100` to see the Excalidraw interface.
-
-## 🤖 Using with Claude Desktop
-
-Add the following to your `claude_desktop_config.json`:
+Add this to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "excalidraw": {
       "command": "npx",
-      "args": ["@excalidraw-mcp/server@latest"]
+      "args": ["-y", "@scofieldfree/excalidraw-mcp"]
     }
   }
 }
 ```
 
-## 🛠️ Development
+### 2. Cursor / Windsurf
 
-This project involves a monorepo structure using pnpm workspace.
+Go to **Settings > MCP**, click **Add New MCP Server**:
 
-- `packages/mcp-server`: The MCP server and web interface
+- **Name**: `excalidraw`
+- **Type**: `command`
+- **Command**: `npx -y @scofieldfree/excalidraw-mcp`
 
-```bash
-# Run tests (if applicable)
-pnpm test
+---
 
-# Lint code
-pnpm lint
-```
+## 🛠 Development (For Contributors)
 
-## 📄 License
+If you want to modify the code or contribute:
 
-MIT
+1. **Clone the repo**
+
+   ```bash
+   git clone https://github.com/Scofieldfree/excalidraw-mcp.git
+   cd excalidraw-mcp
+   ```
+
+2. **Install dependencies** (using pnpm)
+
+   ```bash
+   pnpm install
+   ```
+
+3. **Start Development Server**
+
+   ```bash
+   pnpm dev
+   ```
+
+   This will start both the MCP backend (watching changes) and the Vite frontend server.
+
+4. **Build**
+   ```bash
+   pnpm build
+   ```
+
+## 📦 Project Structure
+
+- `packages/mcp-server`: The core MCP server logic (Node.js) + Excalidraw Frontend (React/Vite).
+
+## 📜 License
+
+MIT © [Scofieldfree](https://github.com/Scofieldfree)
