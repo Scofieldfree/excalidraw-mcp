@@ -63,6 +63,9 @@ export default function App() {
     const getNumeric = (value: unknown, fallback: number) =>
       typeof value === 'number' && Number.isFinite(value) ? value : fallback
 
+    const LABEL_EXPAND_SHAPES = new Set(['rectangle', 'ellipse', 'diamond'])
+    const LONG_LABEL_THRESHOLD = 24
+
     const normalizeLineBreakText = (value: unknown) => {
       if (typeof value !== 'string') return value
       return value.replace(/\\n/g, '\n').replace(BR_TAG_RE, '\n')
@@ -112,6 +115,46 @@ export default function App() {
         }
       }
       return normalized
+    }
+
+    const estimateLabelTextBox = (text: string, fontSize = 20) => {
+      const lines = text.split('\n')
+      const maxChars = Math.max(...lines.map((line) => line.length), 1)
+      return {
+        width: Math.ceil(maxChars * fontSize * 0.58 + 32),
+        height: Math.ceil(lines.length * fontSize * 1.35 + 24),
+      }
+    }
+
+    const expandContainerForLongLabel = (element: any) => {
+      if (!element || typeof element !== 'object') return element
+      if (!LABEL_EXPAND_SHAPES.has(element.type)) return element
+      const labelText =
+        element.label && typeof element.label === 'object' && typeof element.label.text === 'string'
+          ? element.label.text
+          : null
+      if (!labelText) return element
+
+      const isLongLabel =
+        labelText.includes('\n') ||
+        labelText.replace(/\s+/g, ' ').trim().length > LONG_LABEL_THRESHOLD
+      if (!isLongLabel) return element
+
+      const fontSize =
+        element.label &&
+        typeof element.label === 'object' &&
+        typeof element.label.fontSize === 'number'
+          ? element.label.fontSize
+          : 20
+      const estimated = estimateLabelTextBox(labelText, fontSize)
+      const width = Math.max(getNumeric(element.width, 0), estimated.width)
+      const height = Math.max(getNumeric(element.height, 0), estimated.height)
+
+      return {
+        ...element,
+        width,
+        height,
+      }
     }
 
     const getBounds = (element: any) => {
@@ -679,7 +722,9 @@ export default function App() {
       try {
         const result = await parseMermaidToExcalidraw(mermaidDiagram, {})
         const parsedElements = Array.isArray(result.elements) ? result.elements : []
-        const normalizedParsedElements = parsedElements.map((el) => normalizeElementTextMarkup(el))
+        const normalizedParsedElements = parsedElements.map((el) =>
+          expandContainerForLongLabel(normalizeElementTextMarkup(el)),
+        )
         const convertedElements = convertToExcalidrawElements(normalizedParsedElements as any, {
           regenerateIds: false,
         }).map((el) => normalizeLinearElement(el))
@@ -791,7 +836,7 @@ export default function App() {
             // Convert skeleton data to complete Excalidraw elements
             const newElements = convertToExcalidrawElements(
               (Array.isArray(msg.skeletons) ? msg.skeletons : []).map((el: any) =>
-                normalizeElementTextMarkup(el),
+                expandContainerForLongLabel(normalizeElementTextMarkup(el)),
               ),
               { regenerateIds: false }, // Preserve server-generated IDs
             )
