@@ -7,6 +7,7 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { getSession, updateSession, type AppState, type ExcalidrawElement } from './state.js'
 import { log } from './logger.js'
+import { normalizeElementsForStorage } from './shared/element-normalizer.js'
 
 let wss: WebSocketServer | null = null
 
@@ -300,7 +301,8 @@ export function startWebSocket(server: any): void {
             markSkeletonBatchSynced(currentSessionId, msg.batchId)
           }
 
-          session.elements = msg.elements as unknown as ExcalidrawElement[]
+          const normalizedElements = normalizeElementsForStorage(msg.elements)
+          session.elements = normalizedElements as unknown as ExcalidrawElement[]
           session.version++
           updateSession(session)
 
@@ -337,7 +339,8 @@ export function startWebSocket(server: any): void {
           }
 
           const session = getSession(currentSessionId)
-          session.elements = msg.elements as unknown as ExcalidrawElement[]
+          const normalizedElements = normalizeElementsForStorage(msg.elements)
+          session.elements = normalizedElements as unknown as ExcalidrawElement[]
           if (msg.appState && isPlainObject(msg.appState)) {
             const { collaborators: _collaborators, ...safeAppState } = msg.appState as any
             session.appState = {
@@ -397,7 +400,8 @@ export function startWebSocket(server: any): void {
           const currentSessionId = clientSessions.get(ws) || 'default'
           const session = getSession(currentSessionId)
 
-          session.elements = msg.elements as unknown as ExcalidrawElement[]
+          const normalizedElements = normalizeElementsForStorage(msg.elements)
+          session.elements = normalizedElements as unknown as ExcalidrawElement[]
           if (msg.appState) {
             // 防御性编程：移除可能导致客户端崩溃的 collaborators 属性
             const { collaborators: _collaborators, ...safeAppState } = msg.appState as any

@@ -8,6 +8,11 @@ import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw'
 import { Wifi, WifiOff } from 'lucide-react'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useEffect, useRef, useState } from 'react'
+import {
+  LINEAR_ELEMENT_TYPES,
+  normalizeLinearElement,
+  sanitizeElementTextFields,
+} from '../src/shared/element-normalizer'
 
 /**
  * 从 URL 参数获取 sessionId
@@ -45,76 +50,15 @@ export default function App() {
   useEffect(() => {
     isMountedRef.current = true
 
-    const LINEAR_ELEMENT_TYPES = new Set(['arrow', 'line', 'freedraw'])
-    const BR_TAG_RE = /<\s*br\s*\/?\s*>|<\s*\/\s*br\s*>/gi
-    const BLOCK_BREAK_TAG_RE = /<\s*\/?\s*(p|div|li|ul|ol|section|article)\b[^>]*>/gi
-    const INLINE_STRIP_TAG_RE = /<\s*\/?\s*(b|strong|i|em|code|span|small|mark)\b[^>]*>/gi
-    const GENERIC_TAG_RE = /<[^>]+>/g
-    const HTML_ENTITY_MAP: Record<string, string> = {
-      nbsp: ' ',
-      lt: '<',
-      gt: '>',
-      amp: '&',
-      quot: '"',
-      '#39': "'",
-      apos: "'",
-    }
-
     const getNumeric = (value: unknown, fallback: number) =>
       typeof value === 'number' && Number.isFinite(value) ? value : fallback
 
     const LABEL_EXPAND_SHAPES = new Set(['rectangle', 'ellipse', 'diamond'])
     const LONG_LABEL_THRESHOLD = 24
 
-    const normalizeLineBreakText = (value: unknown) => {
-      if (typeof value !== 'string') return value
-      return value.replace(/\\n/g, '\n').replace(BR_TAG_RE, '\n')
-    }
-
-    const decodeHtmlEntities = (text: string): string =>
-      text.replace(/&([a-zA-Z0-9#]+);/g, (full: string, key: string): string => {
-        const normalized = String(key).toLowerCase()
-        if (Object.prototype.hasOwnProperty.call(HTML_ENTITY_MAP, normalized)) {
-          return HTML_ENTITY_MAP[normalized] || full
-        }
-        return full
-      })
-
-    const normalizeWhitespace = (text: string) =>
-      text
-        .replace(/\r\n?/g, '\n')
-        .replace(/[ \t]+\n/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/\u00A0/g, ' ')
-        .trim()
-
-    const sanitizeRichText = (value: unknown) => {
-      if (typeof value !== 'string') return value
-      const withLineBreaks = String(normalizeLineBreakText(value))
-      const withBlockBreaks = withLineBreaks.replace(BLOCK_BREAK_TAG_RE, '\n')
-      const withoutInlineTags = withBlockBreaks.replace(INLINE_STRIP_TAG_RE, '')
-      const withoutGenericTags = withoutInlineTags.replace(GENERIC_TAG_RE, '')
-      const decoded = decodeHtmlEntities(withoutGenericTags)
-      return normalizeWhitespace(decoded)
-    }
-
     const normalizeElementTextMarkup = (element: any) => {
       if (!element || typeof element !== 'object') return element
-      const normalized = { ...element }
-      if (typeof normalized.text === 'string') {
-        normalized.text = sanitizeRichText(normalized.text)
-      }
-      if (
-        normalized.label &&
-        typeof normalized.label === 'object' &&
-        typeof normalized.label.text === 'string'
-      ) {
-        normalized.label = {
-          ...normalized.label,
-          text: sanitizeRichText(normalized.label.text),
-        }
-      }
-      return normalized
+      return sanitizeElementTextFields(element as Record<string, unknown>) as any
     }
 
     const estimateLabelTextBox = (text: string, fontSize = 20) => {
@@ -189,36 +133,7 @@ export default function App() {
     }
 
     const ensureLinearPoints = (element: any) => {
-      if (!LINEAR_ELEMENT_TYPES.has(element?.type)) {
-        return element
-      }
-      const rawPoints = Array.isArray(element.points) ? element.points : []
-      const normalizedPoints = rawPoints.filter(
-        (point: unknown) =>
-          Array.isArray(point) &&
-          point.length >= 2 &&
-          typeof point[0] === 'number' &&
-          typeof point[1] === 'number',
-      )
-      const safePoints =
-        normalizedPoints.length >= 2
-          ? normalizedPoints
-          : [
-              [0, 0],
-              [Math.max(getNumeric(element.width, 100), 40), getNumeric(element.height, 0)],
-            ]
-      return {
-        ...element,
-        points: safePoints,
-        ...(element.type === 'freedraw'
-          ? {
-              pressures:
-                Array.isArray(element.pressures) && element.pressures.length === safePoints.length
-                  ? element.pressures
-                  : Array(safePoints.length).fill(0.5),
-            }
-          : {}),
-      }
+      return normalizeLinearElement(element as Record<string, unknown>) as any
     }
 
     const resolveElementOverlaps = (elements: any[], minGap = 24) => {
@@ -668,45 +583,6 @@ export default function App() {
       mermaidDiagram?: string
       reset?: boolean
     }) => {
-      const normalizeLinearElement = (element: any) => {
-        if (!element || typeof element !== 'object') {
-          return element
-        }
-
-        if (!['arrow', 'line', 'freedraw'].includes(element.type)) {
-          return element
-        }
-
-        const points = Array.isArray(element.points) ? element.points : []
-        const normalizedPoints = points.filter(
-          (point: unknown) =>
-            Array.isArray(point) &&
-            point.length >= 2 &&
-            typeof point[0] === 'number' &&
-            typeof point[1] === 'number',
-        )
-        const safePoints =
-          normalizedPoints.length >= 2
-            ? normalizedPoints
-            : [
-                [0, 0],
-                [Math.max(Number(element.width) || 100, 40), Number(element.height) || 0],
-              ]
-
-        return {
-          ...element,
-          points: safePoints,
-          ...(element.type === 'freedraw'
-            ? {
-                pressures:
-                  Array.isArray(element.pressures) && element.pressures.length === safePoints.length
-                    ? element.pressures
-                    : Array(safePoints.length).fill(0.5),
-              }
-            : {}),
-        }
-      }
-
       const requestId = typeof msg.requestId === 'string' ? msg.requestId : null
       const mermaidDiagram = typeof msg.mermaidDiagram === 'string' ? msg.mermaidDiagram : null
 
@@ -727,7 +603,7 @@ export default function App() {
         )
         const convertedElements = convertToExcalidrawElements(normalizedParsedElements as any, {
           regenerateIds: false,
-        }).map((el) => normalizeLinearElement(el))
+        }).map((el) => ensureLinearPoints(el))
         const isSequenceDiagram = /^\s*sequenceDiagram\b/m.test(mermaidDiagram)
         const optimizedElements = isSequenceDiagram
           ? convertedElements.map((el) => ensureLinearPoints(el as any))
@@ -756,7 +632,7 @@ export default function App() {
           JSON.stringify({
             type: 'mermaid_converted',
             requestId,
-            elements: mergedElements,
+            elements: mergedElements.map((el) => ensureLinearPoints(el as any)),
           }),
         )
       } catch (error) {
@@ -824,7 +700,7 @@ export default function App() {
                   JSON.stringify({
                     type: 'elements_converted',
                     batchId,
-                    elements: currentElements,
+                    elements: currentElements.map((el) => ensureLinearPoints(el as any)),
                   }),
                 )
               }
@@ -860,7 +736,7 @@ export default function App() {
                 JSON.stringify({
                   type: 'elements_converted',
                   ...(batchId ? { batchId } : {}),
-                  elements: mergedElements,
+                  elements: mergedElements.map((el) => ensureLinearPoints(el as any)),
                 }),
               )
             }
