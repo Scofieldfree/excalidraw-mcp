@@ -5,6 +5,7 @@ import {
   convertToExcalidrawElements,
 } from '@excalidraw/excalidraw'
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw'
+import { Wifi, WifiOff } from 'lucide-react'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { useEffect, useRef, useState } from 'react'
 
@@ -397,7 +398,10 @@ export default function App() {
         <span>
           Session: <strong>{currentSessionId}</strong>
         </span>
-        <span>{isConnected ? '🟢 Connected' : '🔴 Disconnected'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {isConnected ? <Wifi size={16} /> : <WifiOff size={16} />}
+          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+        </div>
       </div>
 
       {/* Excalidraw 画布 */}
