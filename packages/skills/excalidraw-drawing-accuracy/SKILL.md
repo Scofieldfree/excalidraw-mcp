@@ -1,6 +1,6 @@
 ---
 name: excalidraw-drawing-accuracy
-description: Minimal Excalidraw workflow for stable output: start session first, route Mermaid/manual correctly, use default Ghibli style, write in small batches, then do a quick verification.
+description: 'Minimal Excalidraw workflow for stable output. Steps: start session first, route Mermaid/manual inputs correctly, use the default Ghibli style, write in small batches, and verify.'
 ---
 
 # Excalidraw Drawing (Minimal)
