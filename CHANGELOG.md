@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.1](https://github.com/scofieldfree/excalidraw-mcp/compare/v0.1.0...v0.1.1) (2026-02-08)
+
+### ♻️ Refactoring
+
+- **skills:** simplify excalidraw-drawing-accuracy to lightweight workflow ([af595f3](https://github.com/scofieldfree/excalidraw-mcp/commit/af595f3e56b4e31b9614d8c7476f46d474628a11))
+
+### 📝 Documentation
+
+- enhance README with comprehensive usage examples and architecture ([43c9074](https://github.com/scofieldfree/excalidraw-mcp/commit/43c9074babb655c34de2c2ef94674ebee0c2dd7f))
+- **skills:** enhance excalidraw-drawing-accuracy workflow and quality gates ([e11cf5e](https://github.com/scofieldfree/excalidraw-mcp/commit/e11cf5e6606bada4744cc8baa4f1d8ce8dae1538))
+
+### ✨ Features
+
+- enhance shape label support with normalized alignment ([d64aad9](https://github.com/scofieldfree/excalidraw-mcp/commit/d64aad9f04146c260dc34bee14299f07676fe80e))
+- **skills:** add excalidraw-drawing-accuracy skill ([5d24874](https://github.com/scofieldfree/excalidraw-mcp/commit/5d24874d2771f41816c47ef4c5a5e33d0e80cdb7))
+
 ## 0.1.0 (2026-02-08)
 
 ### 📝 Documentation
