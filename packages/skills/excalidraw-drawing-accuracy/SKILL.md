@@ -49,6 +49,7 @@ Use this short loop:
 1. Start session
 
 - call `start_session` with `sessionId`
+- MUST complete this step before any write tool (`create_from_mermaid`, `add_elements`, `update_element`, `delete_element`)
 
 2. First render
 
@@ -66,21 +67,24 @@ Use this short loop:
 - confirm key nodes/edges exist
 - return session URL + summary of what changed
 
-## Minimal Constraints
+## Validation Split
 
-1. Every non-text element has explicit stable `id`.
-2. For arrows, bind both endpoints when possible (`start/end` preferred).
-3. Create/connect in segments; avoid one-shot giant payloads.
-4. Target updates by `id`, not by coordinate guessing.
+Hard validation is owned by MCP/tool schemas.
+
+Skill keeps only lightweight execution rules:
+
+1. Create/connect in segments; avoid one-shot giant payloads.
+2. Target updates by `id` first.
+3. Keep one style system per diagram (default `Ghibli` unless user overrides).
 
 ## Pre-Flight Checklist
 
 Before scene write (`create_from_mermaid` / `add_elements` / `update_element`):
 
+- [ ] `start_session` already called for this `sessionId`
 - [ ] sessionId fixed and consistent
 - [ ] strategy selected (Mermaid vs manual)
 - [ ] style selected (default `Ghibli` unless user overrides)
-- [ ] ids unique
 - [ ] write plan is segmented (2-4 batches for medium/large scenes)
 
 ## Post-Write Verification
@@ -97,6 +101,7 @@ If checks fail, patch only the failing region and re-verify.
 ## Failure Handling
 
 - `connection_error`: session/server unavailable -> re-check session and endpoint, retry
+- `session_not_started`: write attempted before `start_session` -> call `start_session` first, then retry write
 - `missing_element`: id not found -> refresh scene, remap target, retry
 - `binding_error`: arrow/text unbound -> patch with explicit bindings
 - `layout_issue`: unreadable region -> manual local fix with `update_element`
