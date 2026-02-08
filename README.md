@@ -8,7 +8,7 @@ An MCP (Model Context Protocol) server that empowers AI agents (like **Claude**,
 > **Why Excalidraw?** Its hand-drawn aesthetic and JSON-based format are perfect for rapid, programmable diagramming. This server bridges standard MCP clients with a local Excalidraw instance, enabling AI-powered visual thinking.
 
 <p align="center">
-  <img src="/images/excalidraw-mcp-demo.png" alt="Excalidraw MCP Demo" width="700">
+  <img src="/images/excalidraw-mcp-architechture.png" alt="Excalidraw MCP Demo" width="700">
 </p>
 
 ## ✨ Features
