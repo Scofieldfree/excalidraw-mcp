@@ -25,16 +25,16 @@ This skill targets tools in `packages/mcp-server/src/tools/*`:
 
 Choose strategy before any tool call:
 
-- If input contains Mermaid data (fenced ```mermaid block or Mermaid DSL text), use `create_from_mermaid`.
-- If input does not contain Mermaid data, use manual element editing (`add_elements`/`update_element`).
+- If input contains Mermaid data (fenced ```mermaid block or Mermaid DSL text), use `create_from_mermaid` only as bootstrap.
+- If input does not contain Mermaid data, use manual element editing (`add_elements`/`update_element`) directly.
 
 Default to manual strategy because it gives deterministic control over ids, bindings, and spacing.
 
-If `create_from_mermaid` is used, always run post-conversion normalization and verification (ids, bindings, spacing, readability) before final delivery.
+If `create_from_mermaid` is used, manual refinement is mandatory before final delivery.
 
 Decision priority:
 
-1. Mermaid input detected -> `create_from_mermaid`
+1. Mermaid input detected -> `create_from_mermaid` (initial skeleton only)
 2. No Mermaid input -> `add_elements` / `update_element`
 
 ## Standard Workflow
@@ -58,7 +58,8 @@ Always execute in this order:
 
 4. Write scene
 
-- create nodes first
+- Mermaid path: run `create_from_mermaid` first, then refine with `add_elements`/`update_element`
+- Manual path: create nodes first
 - attach labels to nodes (`label` preferred)
 - create connectors after both endpoints exist
 - apply updates incrementally for complex diagrams
@@ -67,6 +68,7 @@ Always execute in this order:
 
 - call `get_scene`
 - verify ids exist, labels are bound, and connectors are bound on both ends
+- run quality gate; if failed, fallback to manual reconstruction for affected area
 
 6. Deliver
 
@@ -97,10 +99,11 @@ Do not proceed if any rule fails:
 
 ## Pre-Flight Checklist
 
-Before `add_elements`:
+Before scene write (`create_from_mermaid` / `add_elements` / `update_element`):
 
 - [ ] sessionId fixed and consistent
 - [ ] Mermaid detection completed and strategy selected by priority rule
+- [ ] for Mermaid input: mark this run as bootstrap + refinement (not final write)
 - [ ] ids unique
 - [ ] no orphan text unless explicitly required
 - [ ] all connector endpoints resolvable
@@ -114,9 +117,16 @@ After write/update/delete:
 - [ ] critical ids are present
 - [ ] no dangling connector endpoints
 - [ ] label readability is acceptable
-- [ ] scene can tolerate one-node move without broken links (logical check)
+- [ ] scene can tolerate one-node move without broken links (actual move test)
 
-If any check fails, repair and re-verify before finishing.
+Mermaid quality gate (must pass after conversion):
+
+- [ ] no overlapping core nodes
+- [ ] no label-edge overlap on core flow
+- [ ] no missing semantic edges from source Mermaid
+- [ ] key path direction/layout is readable
+
+If any check fails, repair and re-verify before finishing. For Mermaid path, failing quality gate requires manual fallback (`add_elements`/`update_element`) for the problematic region.
 
 ## Failure Handling
 
@@ -124,6 +134,7 @@ If any check fails, repair and re-verify before finishing.
 - `missing_element`: id not found -> refresh scene, remap target, retry
 - `binding_error`: arrow/text unbound -> patch with explicit bindings
 - `layout_regression`: spacing/alignment degraded -> normalize and update again
+- `mermaid_quality_fail`: converted layout unreadable/incorrect -> manually rebuild affected nodes/edges and re-verify
 
 ## Canonical Patterns
 
