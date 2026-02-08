@@ -46,9 +46,10 @@ jobs:
       - name: Verify package contents
         run: |
           cd packages/mcp-server
-          pnpm pack --dry-run
           echo "Package files to be published:"
           ls -la dist/ web-dist/ 2>/dev/null || echo "Build outputs verified"
+          echo "--- package.json files field ---"
+          cat package.json | grep -A5 '"files"'
 
       - name: Publish to npm
         run: |

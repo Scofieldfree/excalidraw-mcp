@@ -20,7 +20,7 @@
     "release:rc": "standard-version --prerelease rc",
     "release:first": "standard-version --first-release",
     "release:dry": "standard-version --dry-run",
-    "publish:preview": "cd packages/mcp-server && pnpm pack --dry-run",
+    "publish:preview": "cd packages/mcp-server && pnpm publish --dry-run",
     "postrelease": "git push --follow-tags origin main",
     "prepare": "husky"
   },
