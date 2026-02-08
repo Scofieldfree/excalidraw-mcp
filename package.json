@@ -15,6 +15,13 @@
     "release:patch": "standard-version --release-as patch",
     "release:minor": "standard-version --release-as minor",
     "release:major": "standard-version --release-as major",
+    "release:alpha": "standard-version --prerelease alpha",
+    "release:beta": "standard-version --prerelease beta",
+    "release:rc": "standard-version --prerelease rc",
+    "release:first": "standard-version --first-release",
+    "release:dry": "standard-version --dry-run",
+    "publish:preview": "cd packages/mcp-server && pnpm pack --dry-run",
+    "postrelease": "git push --follow-tags origin main",
     "prepare": "husky"
   },
   "packageManager": "pnpm@9.0.0",

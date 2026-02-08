@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "header": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nSee [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.\n",
+  "types": [
+    { "type": "feat", "section": "✨ Features" },
+    { "type": "fix", "section": "🐛 Bug Fixes" },
+    { "type": "perf", "section": "⚡ Performance" },
+    { "type": "refactor", "section": "♻️ Refactoring" },
+    { "type": "docs", "section": "📝 Documentation" },
+    { "type": "chore", "hidden": true },
+    { "type": "style", "hidden": true },
+    { "type": "test", "hidden": true },
+    { "type": "build", "hidden": true },
+    { "type": "ci", "hidden": true }
+  ],
+  "commitUrlFormat": "https://github.com/scofieldfree/excalidraw-mcp/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/scofieldfree/excalidraw-mcp/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/scofieldfree/excalidraw-mcp/issues/{{id}}",
+  "userUrlFormat": "https://github.com/{{user}}",
+  "releaseCommitMessageFormat": "chore(release): {{currentTag}}",
+  "bumpFiles": [
+    { "filename": "package.json", "type": "json" },
+    { "filename": "packages/mcp-server/package.json", "type": "json" }
+  ],
+  "packageFiles": ["package.json"],
+  "tagPrefix": "v"
+}
