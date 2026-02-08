@@ -30,4 +30,4 @@ electron-builder-effective-config.yaml
 
 # 独立子项目（有自己的配置）
 website/
-temp-docs/
+temp-docs/CHANGELOG.md
