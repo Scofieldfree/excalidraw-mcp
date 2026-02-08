@@ -43,6 +43,16 @@ export function registerUpdateElement(server: McpServer): void {
             roughness: z.number().optional(),
             opacity: z.number().optional(),
             text: z.string().optional(),
+            label: z
+              .object({
+                text: z.string(),
+                fontSize: z.number().optional(),
+                fontFamily: z.number().optional(),
+                strokeColor: z.string().optional(),
+                textAlign: z.enum(['left', 'center', 'right']).optional(),
+                verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+              })
+              .optional(),
             fontSize: z.number().optional(),
             roundness: z
               .object({
@@ -86,8 +96,36 @@ export function registerUpdateElement(server: McpServer): void {
           }
         }
 
+        // Normalize text updates on non-text elements to bound label for better alignment.
+        const normalizedUpdates: Record<string, unknown> = { ...updates }
+        if (element.type !== 'text') {
+          const shapeText = typeof updates.text === 'string' ? updates.text : undefined
+          const incomingLabel =
+            updates.label && typeof updates.label === 'object'
+              ? (updates.label as Record<string, unknown>)
+              : undefined
+
+          if (incomingLabel || shapeText) {
+            const prevLabel =
+              element.label && typeof element.label === 'object'
+                ? (element.label as Record<string, unknown>)
+                : {}
+            const nextLabel: Record<string, unknown> = {
+              ...prevLabel,
+              ...(incomingLabel ?? {}),
+            }
+
+            if (shapeText) nextLabel.text = shapeText
+            nextLabel.textAlign = (nextLabel.textAlign as string | undefined) ?? 'center'
+            nextLabel.verticalAlign = (nextLabel.verticalAlign as string | undefined) ?? 'middle'
+
+            normalizedUpdates.label = nextLabel
+            delete normalizedUpdates.text
+          }
+        }
+
         // 更新元素属性
-        Object.assign(element, updates)
+        Object.assign(element, normalizedUpdates)
         element.updated = Date.now()
         element.version = (element.version ?? 0) + 1
 
@@ -107,7 +145,7 @@ export function registerUpdateElement(server: McpServer): void {
               type: 'text',
               text:
                 `✅ Element updated: ${id} (Session: ${session.id})\n\n` +
-                `Updated attributes: ${Object.keys(updates).join(', ')}`,
+                `Updated attributes: ${Object.keys(normalizedUpdates).join(', ')}`,
             },
           ],
         }

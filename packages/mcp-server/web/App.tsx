@@ -485,8 +485,8 @@ export default function App() {
       const nonDeleted = candidates.filter((el) => !el?.isDeleted)
       if (nonDeleted.length === 0) return
       api.scrollToContent(nonDeleted, {
-        fitToViewport: true,
-        viewportZoomFactor: 0.9,
+        // Keep current zoom level; only pan/center viewport.
+        fitToViewport: false,
         animate: false,
       })
     }

@@ -237,7 +237,27 @@ function createElementSkeleton(
   if (input.locked !== undefined) skeleton.locked = input.locked
   if (input.link) skeleton.link = input.link
   if (input.customData) skeleton.customData = input.customData
-  if (input.label) skeleton.label = input.label
+  // Normalize shape text: for non-text elements, prefer bound label with centered alignment.
+  if (input.type !== 'text') {
+    const labelFromInput = input.label
+      ? {
+          ...input.label,
+          textAlign: input.label.textAlign ?? 'center',
+          verticalAlign: input.label.verticalAlign ?? 'middle',
+        }
+      : undefined
+
+    if (labelFromInput) {
+      skeleton.label = labelFromInput
+    } else if (input.text) {
+      // Backward-compatible shorthand: allow shape.text and convert to bound label.
+      skeleton.label = {
+        text: input.text,
+        textAlign: 'center',
+        verticalAlign: 'middle',
+      }
+    }
+  }
 
   if (input.type === 'text') {
     if (input.text !== undefined) skeleton.text = input.text
