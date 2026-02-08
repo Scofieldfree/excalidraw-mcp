@@ -1,13 +1,13 @@
 ---
 name: excalidraw-drawing-accuracy
-description: Accuracy-first Excalidraw drawing skill for this MCP server. Use when creating/updating diagrams with strict structure constraints, deterministic layout, endpoint/text bindings, and post-write verification.
+description: Lightweight Excalidraw drawing skill for this MCP server. Use for fast diagram creation with minimal constraints, then iterate with targeted fixes.
 ---
 
-# Excalidraw Drawing Accuracy
+# Excalidraw Drawing (Lightweight)
 
-Use this skill for all diagram generation/refinement tasks where correctness and edit stability matter.
+Use this skill to get a usable diagram quickly, then refine in small steps.
 
-Source of truth: this file is the primary definition. Mirror copies should sync from here.
+Source of truth: this file is the primary definition.
 
 ## Scope
 
@@ -23,91 +23,65 @@ This skill targets tools in `packages/mcp-server/src/tools/*`:
 
 ## 1. Strategy Selection
 
-Choose strategy before any tool call:
+Use simple routing:
 
-- If input contains Mermaid data (fenced ```mermaid block or Mermaid DSL text), use `create_from_mermaid` only as bootstrap.
-- If input does not contain Mermaid data, use manual element editing (`add_elements`/`update_element`) directly.
+- Input contains Mermaid (` ```mermaid ` or Mermaid DSL) -> `create_from_mermaid`
+- Otherwise -> `add_elements` / `update_element`
 
-Default to manual strategy because it gives deterministic control over ids, bindings, and spacing.
+## 2. Default Style
 
-If `create_from_mermaid` is used, manual refinement is mandatory before final delivery.
+Default preset: `Ghibli` (apply when user does not specify style).
 
-Decision priority:
+- Primary node: `backgroundColor: #f0f9ff`, `strokeColor: #0369a1`
+- Secondary node: `backgroundColor: #f7fee7`, `strokeColor: #365314`
+- Accent node: `backgroundColor: #fff7ed`, `strokeColor: #9a3412`
+- Shared style: `fillStyle: "hachure"`, `roughness: 2`, `roundness: { "type": 3 }`
 
-1. Mermaid input detected -> `create_from_mermaid` (initial skeleton only)
-2. No Mermaid input -> `add_elements` / `update_element`
+Override rule:
+
+- If user explicitly asks for another style, follow user style.
+- Otherwise keep Ghibli and do not mix different style systems in one diagram.
 
 ## Standard Workflow
 
-Always execute in this order:
+Use this short loop:
 
-1. Start and target a session
+1. Start session
 
 - call `start_session` with `sessionId`
-- keep using the same `sessionId` in subsequent calls
 
-2. Validate intent
+2. First render
 
-- identify required nodes, edges, and labels
-- decide layout direction: vertical (pipeline/hierarchy) or horizontal (sequence/timeline)
+- Mermaid input: call `create_from_mermaid`
+- Non-Mermaid input: call `add_elements` in 2-4 small batches (not one huge batch)
 
-3. Normalize plan
+3. Quick polish
 
-- assign stable ids for all nodes and edges
-- define spacing, sizing, and edge semantics before writing
+- use `update_element` for spacing, labels, and key connector fixes
+- prefer touching only problematic elements
 
-4. Write scene
-
-- Mermaid path: run `create_from_mermaid` first, then refine with `add_elements`/`update_element`
-- Manual path: create nodes first
-- attach labels to nodes (`label` preferred)
-- create connectors after both endpoints exist
-- apply updates incrementally for complex diagrams
-
-5. Verify
+4. Verify and deliver
 
 - call `get_scene`
-- verify ids exist, labels are bound, and connectors are bound on both ends
-- run quality gate; if failed, fallback to manual reconstruction for affected area
+- confirm key nodes/edges exist
+- return session URL + summary of what changed
 
-6. Deliver
-
-- provide session URL and summarize changed node/edge ids
-
-## Hard Constraints (Blocking)
-
-Do not proceed if any rule fails:
+## Minimal Constraints
 
 1. Every non-text element has explicit stable `id`.
-2. Text on shapes is bound (`label` preferred over free-floating text).
-3. Bound text does not set explicit `x/y/width/height`.
-4. Every arrow has both ends bound via `start/end` or `startBinding/endBinding`.
-5. Arrows are created only after source/target nodes exist.
-6. Update/delete targets by stable identity (`id`, semantic role), not by coordinates.
-7. Grouping (if used) only after layout is stable.
-
-## Quality Constraints (Non-Blocking)
-
-- Node size target: `200-300 x 80-120`
-- Spacing target: `40-60px`
-- Connector gap target: `10-15px`
-- Use orthogonal connectors when possible
-- Connector semantics:
-  - `solid`: primary/required flow
-  - `dashed`: weak dependency or boundary
-  - `dotted`: optional/future/reference
+2. For arrows, bind both endpoints when possible (`start/end` preferred).
+3. Create/connect in segments; avoid one-shot giant payloads.
+4. Target updates by `id`, not by coordinate guessing.
 
 ## Pre-Flight Checklist
 
 Before scene write (`create_from_mermaid` / `add_elements` / `update_element`):
 
 - [ ] sessionId fixed and consistent
-- [ ] Mermaid detection completed and strategy selected by priority rule
-- [ ] for Mermaid input: mark this run as bootstrap + refinement (not final write)
+- [ ] strategy selected (Mermaid vs manual)
+- [ ] style selected (default `Ghibli` unless user overrides)
 - [ ] ids unique
-- [ ] no orphan text unless explicitly required
-- [ ] all connector endpoints resolvable
-- [ ] layout direction and spacing policy defined
+- [ ] write plan is segmented (2-4 batches for medium/large scenes)
 
 ## Post-Write Verification
 
@@ -115,26 +89,17 @@ After write/update/delete:
 
 - [ ] `get_scene` succeeds
 - [ ] critical ids are present
-- [ ] no dangling connector endpoints
-- [ ] label readability is acceptable
-- [ ] scene can tolerate one-node move without broken links (actual move test)
+- [ ] no obvious broken connector on core flow
+- [ ] labels are readable for core nodes
 
-Mermaid quality gate (must pass after conversion):
-
-- [ ] no overlapping core nodes
-- [ ] no label-edge overlap on core flow
-- [ ] no missing semantic edges from source Mermaid
-- [ ] key path direction/layout is readable
-
-If any check fails, repair and re-verify before finishing. For Mermaid path, failing quality gate requires manual fallback (`add_elements`/`update_element`) for the problematic region.
+If checks fail, patch only the failing region and re-verify.
 
 ## Failure Handling
 
 - `connection_error`: session/server unavailable -> re-check session and endpoint, retry
 - `missing_element`: id not found -> refresh scene, remap target, retry
 - `binding_error`: arrow/text unbound -> patch with explicit bindings
-- `layout_regression`: spacing/alignment degraded -> normalize and update again
-- `mermaid_quality_fail`: converted layout unreadable/incorrect -> manually rebuild affected nodes/edges and re-verify
+- `layout_issue`: unreadable region -> manual local fix with `update_element`
 
 ## Canonical Patterns
 
@@ -180,5 +145,5 @@ When concluding work, report:
 
 1. `sessionId`
 2. created/updated/deleted ids
-3. hard-constraint pass status
-4. any residual risks (if constraints could not be fully satisfied)
+3. core checks pass/fail
+4. next suggested tweak (one item max)
