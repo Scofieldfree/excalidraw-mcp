@@ -28,9 +28,31 @@ An MCP (Model Context Protocol) server that empowers AI agents (like **Claude**,
 
 You don't need to clone this repo. Just configure your MCP client:
 
-### Claude Desktop
+### Claude Code (cc)
 
-Add to your `claude_desktop_config.json`:
+```bash
+claude mcp add excalidraw -- npx -y @scofieldfree/excalidraw-mcp
+```
+
+### Codex CLI
+
+```bash
+codex mcp add excalidraw -- npx -y @scofieldfree/excalidraw-mcp
+```
+
+### Cursor / Windsurf
+
+Go to **Settings > MCP** → **Add New MCP Server**:
+
+| Field   | Value                                 |
+| ------- | ------------------------------------- |
+| Name    | `excalidraw`                          |
+| Type    | `command`                             |
+| Command | `npx -y @scofieldfree/excalidraw-mcp` |
+
+### Cline (VS Code Extension)
+
+Open Cline settings and add to MCP Servers:
 
 ```json
 {
@@ -43,15 +65,84 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-### Cursor / Windsurf
+### GitHub Copilot
 
-Go to **Settings > MCP** → **Add New MCP Server**:
+Use the Copilot CLI to interactively add:
 
-| Field   | Value                                 |
-| ------- | ------------------------------------- |
-| Name    | `excalidraw`                          |
-| Type    | `command`                             |
-| Command | `npx -y @scofieldfree/excalidraw-mcp` |
+```bash
+/mcp add
+```
+
+Alternatively, create or edit `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "type": "local",
+      "command": "npx",
+      "tools": ["*"],
+      "args": ["-y", "@scofieldfree/excalidraw-mcp"]
+    }
+  }
+}
+```
+
+### Kiro
+
+Follow the [MCP Servers documentation](https://kiro.dev/docs/mcp). Add to `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "npx",
+      "args": ["-y", "@scofieldfree/excalidraw-mcp"]
+    }
+  }
+}
+```
+
+### opencode
+
+```bash
+opencode mcp add excalidraw -- npx -y @scofieldfree/excalidraw-mcp
+```
+
+### VS Code
+
+**One-click install:**
+
+[<img src="https://img.shields.io/badge/Install_Server-VS_Code-blue?logo=visualstudiocode" alt="Install in VS Code">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22excalidraw%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40scofieldfree%2Fexcalidraw-mcp%22%5D%7D)
+[<img src="https://img.shields.io/badge/Install_Server-VS_Code_Insiders-green?logo=visualstudiocode" alt="Install in VS Code Insiders">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%7B%22name%22%3A%22excalidraw%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40scofieldfree%2Fexcalidraw-mcp%22%5D%7D)
+
+**Or install via CLI:**
+
+```bash
+# For VS Code
+code --add-mcp '{"name":"excalidraw","command":"npx","args":["-y","@scofieldfree/excalidraw-mcp"]}'
+
+# For VS Code Insiders
+code-insiders --add-mcp '{"name":"excalidraw","command":"npx","args":["-y","@scofieldfree/excalidraw-mcp"]}'
+```
+
+### Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "excalidraw": {
+      "command": "npx",
+      "args": ["-y", "@scofieldfree/excalidraw-mcp"]
+    }
+  }
+}
+```
 
 ---
 
